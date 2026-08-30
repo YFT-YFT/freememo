@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ペンテキ (手書きテキスト自在メモ)</title>
   <!-- Fabric.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
@@ -35,6 +35,11 @@
     * { box-sizing: border-box; touch-action: none; }
     body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #e9ecef; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     
+    /* UI要素が誤ってブラウザピンチで拡大されるのを防止 */
+    #toolbar, .modal-content, #guide-text, .footer-info {
+      touch-action: manipulation;
+    }
+
     /* 1列化・固定ボタン対応ツールバー */
     #toolbar {
       position: absolute;
@@ -64,6 +69,7 @@
       scrollbar-width: thin;
       scrollbar-color: #007bff #f1f3f5;
       -webkit-overflow-scrolling: touch;
+      touch-action: pan-x; /* 横スクロール操作の向上 */
     }
 
     .tool-scroll-area::-webkit-scrollbar { height: 4px; }
@@ -403,7 +409,7 @@
   <textarea id="canvas-dummy-input" aria-hidden="true"></textarea>
   <canvas id="c"></canvas>
 
-  <!-- 丁寧・詳細に改訂した使い方ガイドモーダル -->
+  <!-- 使い方ガイドモーダル -->
   <div id="help-modal" class="modal-overlay">
     <div class="modal-content">
       <h3>💡 ペンテキ 使い方ガイド</h3>
@@ -475,6 +481,76 @@
       fireRightClick: true,
       stopContextMenu: true
     });
+
+    // --- マルチプラットフォーム対応（iOS Safari / Android / PC ピンチズーム＆移動追加） ---
+    let isTwoFingerTouch = false;
+    let touchStartDist = 0;
+    let touchStartZoom = 1;
+    let lastTouchCenter = { x: 0, y: 0 };
+
+    window.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        isTwoFingerTouch = true;
+        canvas.isDrawingMode = false;
+
+        touchStartDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        touchStartZoom = canvas.getZoom();
+
+        lastTouchCenter = {
+          x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+          y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && isTwoFingerTouch) {
+        if (e.cancelable) e.preventDefault();
+
+        const currentDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+
+        const currentCenter = {
+          x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+          y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
+
+        // ズーム処理
+        if (touchStartDist > 0) {
+          let zoom = touchStartZoom * (currentDist / touchStartDist);
+          zoom = Math.min(Math.max(0.2, zoom), 5);
+          canvas.zoomToPoint({ x: currentCenter.x, y: currentCenter.y }, zoom);
+        }
+
+        // 2本指移動（パン）処理
+        const deltaX = currentCenter.x - lastTouchCenter.x;
+        const deltaY = currentCenter.y - lastTouchCenter.y;
+        
+        const vpt = canvas.viewportTransform;
+        vpt[4] += deltaX;
+        vpt[5] += deltaY;
+        canvas.requestRenderAll();
+
+        lastTouchCenter = currentCenter;
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2 && isTwoFingerTouch) {
+        isTwoFingerTouch = false;
+        touchStartDist = 0;
+        
+        if (!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser') {
+          canvas.isDrawingMode = true;
+        }
+      }
+    });
+    // --- ここまでマルチプラットフォーム対応 ---
 
     const dummyInput = document.getElementById('canvas-dummy-input');
     document.addEventListener('contextmenu', e => e.preventDefault());
@@ -584,7 +660,7 @@
         return;
       }
 
-      if (isPanLockMode || evt.button === 2 || isShiftPressed || evt.touches?.length === 2) {
+      if (isPanLockMode || evt.button === 2 || isShiftPressed) {
         isPanDragging = true;
         canvas.isDrawingMode = false;
         canvas.defaultCursor = 'grabbing';
@@ -1255,7 +1331,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.1     Created by フジイヨウスケ with Gemini</div>
+    <div class="footer-text">Ver.0.11     Created by フジイヨウスケ with Gemini</div>
   </div>
 
 </body>
