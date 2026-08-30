@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>ペンテキ　(手書きテキスト自在メモ)</title>
+  <title>ペンテキ (手書きテキスト自在メモ)</title>
   <!-- Fabric.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
   <!-- jsPDF (PDF出力用) -->
@@ -13,32 +13,34 @@
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   </script>
-  <!-- PWA & アイコン設定 -->
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png" type="image/png">
-<link rel="apple-touch-icon" href="icon-192.png">
-<meta name="theme-color" content="#0066ff">
 
-<!-- サービスワーカーの登録 -->
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js')
-        .then(reg => console.log('SW registered!'))
-        .catch(err => console.log('SW registration failed:', err));
-    });
-  }
-</script>
+  <!-- PWA & アイコン設定 -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="theme-color" content="#0066ff">
+
+  <!-- サービスワーカーの登録 -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('SW registered!'))
+          .catch(err => console.log('SW registration failed:', err));
+      });
+    }
+  </script>
+
   <style>
     * { box-sizing: border-box; touch-action: none; }
     body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #e9ecef; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     
-    /* 一体型メニューバー */
+    /* 1列化・固定ボタン対応ツールバー */
     #toolbar {
       position: absolute;
-      top: 12px;
-      left: 12px;
-      right: 12px;
+      top: 8px;
+      left: 8px;
+      right: 8px;
       z-index: 10;
       display: flex;
       align-items: center;
@@ -46,54 +48,36 @@
       border-radius: 12px;
       box-shadow: 0 4px 16px rgba(0,0,0,0.12);
       backdrop-filter: blur(8px);
-      white-space: nowrap;
       padding: 6px 8px;
       overflow: hidden;
     }
 
-    /* 左側スクロールエリア */
-    .tool-scroll-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-    }
-
+    /* 1列横スクロールエリア */
     .tool-scroll-area {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+      flex: 1;
       overflow-x: auto;
-      padding: 4px 12px 4px 4px;
+      white-space: nowrap;
+      padding-right: 8px;
       scrollbar-width: thin;
       scrollbar-color: #007bff #f1f3f5;
+      -webkit-overflow-scrolling: touch;
     }
 
     .tool-scroll-area::-webkit-scrollbar { height: 4px; }
     .tool-scroll-area::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 2px; }
     .tool-scroll-area::-webkit-scrollbar-thumb { background: #007bff; border-radius: 2px; }
 
-    .scroll-fade-edge {
-      width: 28px;
-      height: 100%;
-      background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 1));
-      pointer-events: none;
-      flex-shrink: 0;
-      margin-left: -28px;
-      z-index: 2;
-    }
-
-    /* 右側固定エリア */
-    .btn-group-fixed {
+    /* 右側常時固定エリア (❓ボタンのみ) */
+    .btn-fixed-right {
       display: flex;
       align-items: center;
-      gap: 6px;
       flex-shrink: 0;
       padding-left: 8px;
-      border-left: 1px solid #e0e0e0;
-      background: white;
+      border-left: 1px solid #dee2e6;
+      background: rgba(255, 255, 255, 0.95);
       z-index: 3;
     }
 
@@ -130,8 +114,8 @@
     input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
     input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
 
-    input[type="range"] { width: 50px; cursor: pointer; }
-    input[type="number"] { width: 48px; padding: 3px 4px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; text-align: center; }
+    input[type="range"] { width: 45px; cursor: pointer; }
+    input[type="number"] { width: 46px; padding: 3px 4px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; text-align: center; }
 
     select {
       padding: 4px 6px;
@@ -140,7 +124,7 @@
       border: 1px solid #ccc;
       background: white;
       cursor: pointer;
-      max-width: 160px;
+      max-width: 150px;
     }
 
     .status-badge {
@@ -242,11 +226,12 @@
       border: 1px solid #ced4da;
     }
 
+    /* モーダル表示の設定 */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.5);
-      z-index: 100;
+      z-index: 300;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -258,149 +243,158 @@
       background: white;
       padding: 24px;
       border-radius: 12px;
-      max-width: 500px;
-      width: 90%;
-      max-height: 80vh;
+      max-width: 550px;
+      width: 92%;
+      max-height: 85vh;
       overflow-y: auto;
       box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     }
-    .modal-content h3 { margin-top: 0; }
-    .modal-content ul { padding-left: 20px; line-height: 1.6; font-size: 14px; }
+    .modal-content h3 { margin-top: 0; color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 6px; font-size: 18px; }
+    .modal-section { margin-bottom: 16px; }
+    .modal-section h4 { margin: 10px 0 6px 0; font-size: 14px; color: #333; }
+    .modal-content ul { padding-left: 20px; line-height: 1.6; font-size: 13px; margin: 4px 0; color: #444; }
 
     @media (max-width: 768px) {
       .status-badge { display: none; }
+      #guide-text { display: none; }
     }
 
-/* 右下固定クレジット表記 */
-.footer-info {
-  position: fixed;
-  bottom: 10px;
-  right: 15px;
-  pointer-events: none; /* キャンバス等の操作を邪魔しない */
-  z-index: 200;
-}
+    /* 右下固定クレジット表記 */
+    .footer-info {
+      position: fixed;
+      bottom: 10px;
+      right: 15px;
+      pointer-events: none;
+      z-index: 200;
+    }
 
-.footer-text {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5); /* ダークモード想定の半透明白（明るい画面なら rgba(0,0,0,0.4) ） */
-  font-weight: bold;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8); /* 背景が見えにくくならないためのシャドウ */
-  font-family: sans-serif;
-}
-
+    .footer-text {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      font-weight: bold;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+      font-family: sans-serif;
+    }
   </style>
 </head>
 <body>
 
-  <!-- 一体型ツールバー -->
+  <!-- 単一列ツールバー -->
   <div id="toolbar">
-    <div class="tool-scroll-wrapper">
-      <div class="tool-scroll-area">
-        <div class="tool-group">
-          <button id="pen-mode-btn" class="toggle-btn active" title="標準ペン">✏️ ペン</button>
-          <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️ マーカー</button>
-          <button id="eraser-mode-btn" class="toggle-btn" title="要素消しゴム">🧹 消しゴム</button>
-        </div>
+    <!-- 横スクロール可能エリア（すべてのツールを格納） -->
+    <div class="tool-scroll-area">
+      <!-- 筆記モード -->
+      <div class="tool-group">
+        <button id="pen-mode-btn" class="toggle-btn active" title="標準ペン">✏️ ペン</button>
+        <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️ マーカー</button>
+        <button id="eraser-mode-btn" class="toggle-btn" title="要素消しゴム">🧹 消しゴム</button>
+      </div>
 
-        <div class="tool-group">
-          <div class="tool-item" title="ペンの色">
-            <span>色:</span>
-            <input type="color" id="pen-color" value="#222222">
-          </div>
-          <div class="tool-item" title="ペンの太さ">
-            <span>太さ:</span>
-            <input type="range" id="pen-width" min="1" max="40" value="3">
-            <span id="pen-width-val" style="min-width: 18px;">3px</span>
-          </div>
+      <!-- ペン設定 -->
+      <div class="tool-group">
+        <div class="tool-item" title="ペンの色">
+          <span>色:</span>
+          <input type="color" id="pen-color" value="#222222">
         </div>
-
-        <div class="tool-group">
-          <div class="tool-item" title="図形挿入">
-            <span>図形:</span>
-            <select id="shape-select">
-              <option value="" selected>＋ 図形</option>
-              <option value="line">直線</option>
-              <option value="arrow">矢印</option>
-              <option value="rect">四角形</option>
-              <option value="circle">円</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="tool-group">
-          <div class="tool-item" title="フォント選択">
-            <span>フォント:</span>
-            <select id="font-family">
-              <optgroup label="教科書体 / 学修">
-                <option value="'UD デジタル 教科書体 N-R', 'BIZ UDPデジタル教科書体 NK-R', 'YuKyokasho', serif">UDデジタル教科書体</option>
-              </optgroup>
-              <optgroup label="ゴシック体 (標準・UD)">
-                <option value="'Meiryo', 'ヒラギノ角ゴ ProN', sans-serif">メイリオ / ヒラギノ</option>
-                <option value="'BIZ UDPGothic', 'BIZ UDGothic', sans-serif" selected>BIZ UDゴシック</option>
-                <option value="'Yu Gothic', '游ゴシック', sans-serif">游ゴシック</option>
-              </optgroup>
-              <optgroup label="明朝体">
-                <option value="'BIZ UDPMincho', 'BIZ UDMincho', serif">BIZ UD明朝</option>
-                <option value="'Yu Mincho', serif">游明朝</option>
-              </optgroup>
-              <optgroup label="デザイン・その他">
-                <option value="'Hiragino Maru Gothic ProN', sans-serif">丸ゴシック体</option>
-                <option value="'Comic Sans MS', cursive">ポップ体</option>
-              </optgroup>
-            </select>
-          </div>
-          <div class="tool-item" title="文字サイズ">
-            <span>サイズ:</span>
-            <input type="number" id="font-size-input" value="22" min="8" max="200" step="1">
-          </div>
-          <div class="tool-item" title="文字色">
-            <span>文字色:</span>
-            <input type="color" id="text-color" value="#222222">
-          </div>
-        </div>
-
-        <div class="tool-group">
-          <div class="tool-item" title="背景色">
-            <span>背景:</span>
-            <select id="bg-style">
-              <option value="#ffffff">白（方眼）</option>
-              <option value="#f8f9fa">薄グレー（方眼）</option>
-              <option value="#fbf7ee">クリーム（方眼）</option>
-              <option value="#1e1e1e">ダーク（方眼）</option>
-            </select>
-          </div>
-          <label class="file-label" title="画像・PDFを挿入">
-            📁 ファイル
-            <input type="file" id="img-file-input" accept="image/*,application/pdf">
-          </label>
-          <button id="touch-pan-lock-btn" class="toggle-btn" title="移動固定">✋ 移動固定</button>
+        <div class="tool-item" title="ペンの太さ">
+          <span>太さ:</span>
+          <input type="range" id="pen-width" min="1" max="40" value="3">
+          <span id="pen-width-val" style="min-width: 18px;">3px</span>
         </div>
       </div>
-      <div class="scroll-fade-edge"></div>
+
+      <!-- 図形追加 -->
+      <div class="tool-group">
+        <div class="tool-item" title="図形挿入">
+          <span>図形:</span>
+          <select id="shape-select">
+            <option value="" selected>＋ 図形</option>
+            <option value="line">直線</option>
+            <option value="arrow">矢印</option>
+            <option value="rect">四角形</option>
+            <option value="circle">円</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- テキスト設定 -->
+      <div class="tool-group">
+        <div class="tool-item" title="フォント選択">
+          <span>文字:</span>
+          <select id="font-family">
+            <optgroup label="教科書体 / 学修">
+              <option value="'UD デジタル 教科書体 N-R', 'BIZ UDPデジタル教科書体 NK-R', 'YuKyokasho', serif">UDデジタル教科書体</option>
+            </optgroup>
+            <optgroup label="ゴシック体 (標準・UD)">
+              <option value="'Meiryo', 'ヒラギノ角ゴ ProN', sans-serif">メイリオ / ヒラギノ</option>
+              <option value="'BIZ UDPGothic', 'BIZ UDGothic', sans-serif" selected>BIZ UDゴシック</option>
+              <option value="'Yu Gothic', '游ゴシック', sans-serif">游ゴシック</option>
+            </optgroup>
+            <optgroup label="明朝体">
+              <option value="'BIZ UDPMincho', 'BIZ UDMincho', serif">BIZ UD明朝</option>
+              <option value="'Yu Mincho', serif">游明朝</option>
+            </optgroup>
+            <optgroup label="デザイン・その他">
+              <option value="'Hiragino Maru Gothic ProN', sans-serif">丸ゴシック体</option>
+              <option value="'Comic Sans MS', cursive">ポップ体</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="tool-item" title="文字サイズ">
+          <input type="number" id="font-size-input" value="22" min="8" max="200" step="1">
+          <span>px</span>
+        </div>
+        <div class="tool-item" title="文字色">
+          <input type="color" id="text-color" value="#222222">
+        </div>
+      </div>
+
+      <!-- 背景・ファイル・移動固定 -->
+      <div class="tool-group">
+        <div class="tool-item" title="背景色">
+          <span>背景:</span>
+          <select id="bg-style">
+            <option value="#ffffff">白（方眼）</option>
+            <option value="#f8f9fa">薄グレー（方眼）</option>
+            <option value="#fbf7ee">クリーム（方眼）</option>
+            <option value="#1e1e1e">ダーク（方眼）</option>
+          </select>
+        </div>
+        <label class="file-label" title="画像・PDFを挿入">
+          📁 ファイル
+          <input type="file" id="img-file-input" accept="image/*,application/pdf">
+        </label>
+        <button id="touch-pan-lock-btn" class="toggle-btn" title="画面スクロール固定">✋ 移動固定</button>
+      </div>
+
+      <!-- ページ切り替え -->
+      <div class="tool-group">
+        <div class="page-control">
+          <button id="prev-page-btn" class="step-btn" title="前ページ">◀</button>
+          <span id="page-num-display" style="font-size:11px; font-weight:bold; padding:0 2px;">1/1</span>
+          <button id="next-page-btn" class="step-btn" title="次ページ">▶</button>
+          <button id="add-page-btn" class="step-btn" title="新規ページ追加">＋</button>
+          <button id="delete-page-btn" class="step-btn" title="ページ削除" style="color: #dc3545;">− </button>
+        </div>
+      </div>
+
+      <!-- 画面表示補助・操作履歴・保存・削除 -->
+      <div class="tool-group">
+        <button id="reset-view-btn" class="center-btn" title="初期位置（中央）へ戻す">🎯</button>
+        <button id="fit-content-btn" class="fit-btn" title="全描画を画面に収める">🔍</button>
+        <button id="undo-btn" class="history-btn" disabled title="元に戻す (Ctrl+Z)">↩️</button>
+        <button id="redo-btn" class="history-btn" disabled title="やり直す (Ctrl+Y)">↪️</button>
+        <button id="delete-selected-btn" class="delete-btn" disabled title="選択オブジェクトを削除">🗑️</button>
+        <button id="export-btn" title="全描画をPNG画像保存">💾 PNG</button>
+        <button id="export-pdf-btn" class="pdf-btn" title="全描画をPDF出力">📄 PDF</button>
+        <button id="clear-btn" class="clear-btn" title="ページ全削除">⚠️ 全消去</button>
+        <span id="save-status" class="status-badge">🔄 復元完了</span>
+      </div>
     </div>
 
-    <!-- 右側常時固定エリア -->
-    <div class="btn-group-fixed">
-      <div class="page-control">
-        <button id="prev-page-btn" class="step-btn" title="前ページ">◀</button>
-        <span id="page-num-display" style="font-size:11px; font-weight:bold; padding:0 2px;">1/1</span>
-        <button id="next-page-btn" class="step-btn" title="次ページ">▶</button>
-        <button id="add-page-btn" class="step-btn" title="新規ページ追加">＋</button>
-        <button id="delete-page-btn" class="step-btn" title="ページ削除" style="color: #dc3545;">−</button>
-      </div>
-
-      <button id="reset-view-btn" class="center-btn" title="初期位置へ">🎯</button>
-      <button id="fit-content-btn" class="fit-btn" title="全表示">🔍</button>
-
-      <button id="undo-btn" class="history-btn" disabled title="元に戻す (Ctrl+Z)">↩️</button>
-      <button id="redo-btn" class="history-btn" disabled title="やり直す (Ctrl+Y)">↪️</button>
-
-      <button id="delete-selected-btn" class="delete-btn" disabled title="削除 (Delete)">🗑️</button>
-      <button id="export-btn" title="全描画をPNG保存">💾 PNG</button>
-      <button id="export-pdf-btn" class="pdf-btn" title="全描画をPDF出力">📄 PDF</button>
-      <button id="clear-btn" class="clear-btn">⚠️ 全消去</button>
-      <button id="help-btn" class="toggle-btn" style="background:#e2e3e5;">❓</button>
-      <span id="save-status" class="status-badge">🔄 復元完了</span>
+    <!-- 右側常時固定エリア (❓ヘルプボタンのみ) -->
+    <div class="btn-fixed-right">
+      <button id="help-btn" class="toggle-btn" style="background:#e2e3e5;" title="使い方ガイド">❓</button>
     </div>
   </div>
 
@@ -409,17 +403,55 @@
   <textarea id="canvas-dummy-input" aria-hidden="true"></textarea>
   <canvas id="c"></canvas>
 
+  <!-- 丁寧・詳細に改訂した使い方ガイドモーダル -->
   <div id="help-modal" class="modal-overlay">
     <div class="modal-content">
-      <h3>💡 使い方ガイド & ショートカット</h3>
-      <ul>
-        <li><b>全体保存</b>: 💾 PNG / 📄 PDF ボタンを押すと、キャンバス上の全ての描画（線・文字・画像）を網羅して保存します。</li>
-        <li><b>ファイル読み込み</b>: 📁 ファイル ボタンから画像（PNG/JPEG等）だけでなくPDFファイルを直接読み込んで書き込みができます。</li>
-        <li><b>常時手書き & 文字入力</b>: ドラッグで自由描画。キーボード入力でそのままテキスト開始。</li>
-        <li><b>要素選択</b>: Ctrl キーを押しながらクリック/ドラッグ、または要素をダブルクリック。</li>
-        <li><b>画面移動・ズーム</b>: 右ドラッグ/Shift+ドラッグ/2本指移動。ホイールまたはピンチでズーム。</li>
-      </ul>
-      <button id="close-help-btn" style="width:100%; margin-top:15px;">閉じる</button>
+      <h3>💡 ペンテキ 使い方ガイド</h3>
+      
+      <div class="modal-section">
+        <h4>✏️ 基本の書き込み方法</h4>
+        <ul>
+          <li><b>手書き（ペン・マーカー）</b>: 画面上をドラッグ（指やペンでなぞる）すると、いつでも自由に手書きができます。上部メニューで線の「色」や「太さ」を自由に調整できます。</li>
+          <li><b>キーボードで文字入力</b>: 画面上の入力したい場所を<b>ダブルクリック（またはダブルタップ）</b>すると、その場所に文字を入力できます。フォントやサイズ、文字色の変更も可能です。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>🖐️ 画面の移動と拡大・縮小（ズーム）</h4>
+        <ul>
+          <li><b>スマホ・タブレット</b>: 2本指で画面をスワイプすると移動、つまむ（ピンチアウト/イン）と拡大・縮小ができます。手書き中に誤作動する場合は「✋ 移動固定」をONにしてください。</li>
+          <li><b>パソコン</b>: マウスの「右ドラッグ」または「Shiftキーを押しながらドラッグ」で画面を移動できます。マウスホイールで拡大・縮小が可能です。</li>
+          <li><b>位置のリセット</b>: 画面を見失った時は「🎯」で初期位置に、「🔍」で描いた全体が収まる位置に自動調整します。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>📁 ファイルの読み込みと出力保存</h4>
+        <ul>
+          <li><b>読み込み（📁 ファイル）</b>: お手持ちの画像（PNG/JPEG）や<b>PDFファイル</b>を取り込んで、その上に手書きやメモを重ねることができます。複数ページのPDFにも対応しています。</li>
+          <li><b>書き出し（💾 PNG / 📄 PDF）</b>: キャンバスに書いたすべての内容（手書き・文字・画像）を網羅して、1枚の画像（PNG）またはPDFとして保存できます。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>📑 ページ管理 & 自動保存</h4>
+        <ul>
+          <li><b>複数ページ</b>: 上部メニューの「＋」で新規ページを追加し、「◀」「▶」で自由に切り替えができます。</li>
+          <li><b>安心の自動保存</b>: 書いた内容や作成したページはブラウザ内に自動的に保存されます。ページを閉じたり再読み込みしても続きから作業できます。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>⌨️ 便利なキーボードショートカット（PC向け）</h4>
+        <ul>
+          <li><b>Ctrl + Z</b>: 1つ前の操作を取り消す（元に戻す）</li>
+          <li><b>Ctrl + Y</b>: 取り消した操作をやり直す</li>
+          <li><b>Ctrl + ドラッグ</b>: 描画したオブジェクト（文字や図形）をまとめて範囲選択</li>
+          <li><b>Delete / Backspace</b>: 選択中のオブジェクトを削除</li>
+        </ul>
+      </div>
+
+      <button id="close-help-btn" style="width:100%; margin-top:10px; padding:10px; font-size:14px;">閉じる</button>
     </div>
   </div>
 
@@ -1223,8 +1255,8 @@
   </script>
   
   <div class="footer-info">
-  <div class="footer-text">Created by フジイヨウスケ with Gemini</div>
-</div>
+    <div class="footer-text">Created by フジイヨウスケ with Gemini</div>
+  </div>
 
 </body>
 </html>
