@@ -32,11 +32,21 @@
   </script>
 
   <style>
-    * { box-sizing: border-box; touch-action: none; }
+    /* touch-actionは各要素ごとに個別に評価され、子要素へは継承されない。
+       以前は全要素に touch-action:none を掛けていたため、ツールバー内の
+       ボタン等（子要素）がそれぞれ none を持ってしまい、指がボタンの上から
+       触れると横スクロールやタップが効かなくなる不具合があった。
+       ここではキャンバス(#c)側だけに none を限定し、UI側は manipulation とする。 */
+    * { box-sizing: border-box; }
+    html, body { touch-action: none; }
+    #c { touch-action: none; }
+
     body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #e9ecef; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     
-    /* UI要素が誤ってブラウザピンチで拡大されるのを防止 */
-    #toolbar, .modal-content, #guide-text, .footer-info {
+    /* UI要素が誤ってブラウザピンチで拡大されるのを防止しつつ、タップ・スクロールは正常に機能させる */
+    #toolbar, .modal-content, #guide-text, .footer-info,
+    #toolbar button, #toolbar input, #toolbar select, #toolbar label,
+    #toolbar .tool-item, #toolbar .tool-group, #toolbar .page-control {
       touch-action: manipulation;
     }
 
@@ -490,6 +500,15 @@
 
     window.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) {
+        // ペンで手書き中に手のひらが触れると2本指ジェスチャーと誤認識され、
+        // 描画中の画面が意図せずズーム/移動してしまうことがある。
+        // 手のひらは接触面積(radiusX)が指より大きい傾向があるため、簡易的に除外する。
+        // ※ radiusXを取得できないブラウザ（多くのiOS Safari等）では常に0扱いとなり、
+        //   従来通りの挙動のまま変化しない（安全側のフォールバック）。
+        const r0 = e.touches[0].radiusX || 0;
+        const r1 = e.touches[1].radiusX || 0;
+        if (r0 > 30 || r1 > 30) return;
+
         isTwoFingerTouch = true;
         canvas.isDrawingMode = false;
 
@@ -645,32 +664,112 @@
     let startX, startY;
     let clickCount = 0, clickTimer = null, lastTarget = null;
 
+    // --- Ctrlキーの「物理的な押下状態」をクリックとは独立して追跡する ---
+    // ChromeOSなど一部のOS/トラックパッドドライバは「Ctrl+トラックパッドクリック」を
+    // 内部で「右クリック」ジェスチャーへ変換してしまい、結果としてブラウザに届く
+    // クリックイベントは button:2, ctrlKey:false（Ctrlが押されていた事実が消えている）
+    // という形になることがある。この場合、クリックイベント側の evt.ctrlKey だけを
+    // 見ていては検知しようがない。
+    // そこで、キーボードの keydown/keyup を別経路で監視し、「今Ctrlが物理的に
+    // 押されているか」を独自に保持しておき、クリック側の判定に併用する。
+    let isCtrlKeyPhysicallyHeld = false;
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Control' || e.key === 'Meta') isCtrlKeyPhysicallyHeld = true;
+    }, { capture: true });
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'Control' || e.key === 'Meta') isCtrlKeyPhysicallyHeld = false;
+    }, { capture: true });
+    // ウィンドウがフォーカスを失うと keyup を取りこぼす可能性があるため、その際は
+    // 保持している状態を安全側（押されていない）にリセットする。
+    window.addEventListener('blur', () => { isCtrlKeyPhysicallyHeld = false; });
+
+    // --- 選択モードの判定を「キャプチャフェーズ」で先に確定させる ---
+    // Fabric.js は isDrawingMode=true の状態で mouse:down (touchstart/mousedown) を受け取ると、
+    // このコードの mouse:down ハンドラが呼ばれるより「前」に内部でフリードロー（線）を
+    // 開始してしまう。そのため、ハンドラ内で isDrawingMode=false に切り替えても手遅れで、
+    // Ctrl+クリックやトリプルタップでの選択が不安定になったり、描画が中途半端に
+    // 残ったりする原因になっていた。
+    // ここでは実際にFabricへイベントが渡る前に isDrawingMode を確定させることで、
+    // その競合を根本的に解消する。
+    function precomputeInteractionMode(e) {
+      if (currentDrawMode === 'eraser') { canvas.isDrawingMode = false; return; }
+
+      const isCtrl = e.ctrlKey || e.metaKey || isCtrlKeyPhysicallyHeld;
+      const isShift = e.shiftKey;
+      const isRightClick = e.button === 2;
+
+      if (isPanLockMode || isRightClick || isShift || isCtrl) {
+        canvas.isDrawingMode = false;
+        return;
+      }
+
+      // クリック/タップ位置に既存オブジェクトがあるかを事前判定し、
+      // 連続クリック（パス3回連打・テキストや画像2回連打）のときは
+      // Fabricが描画を開始する前に isDrawingMode を切っておく。
+      let target = null;
+      try { target = canvas.findTarget(e, false); } catch (err) { target = null; }
+
+      if (lastTarget === target) clickCount++;
+      else { clickCount = 1; lastTarget = target; }
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => { clickCount = 0; lastTarget = null; }, 400);
+
+      const willSelect = target && !target.isOriginMark && (
+        canvas.getActiveObject() === target || // 既に選択中のオブジェクトへの単純クリック＆ドラッグは常に「移動」として扱う
+        (target.type === 'path' && clickCount >= 3) ||
+        ((target.type === 'i-text' || target.type === 'image') && clickCount >= 2)
+      );
+
+      canvas.isDrawingMode = !willSelect && (currentDrawMode === 'pen' || currentDrawMode === 'highlighter');
+    }
+
+    const upperCanvasEl = canvas.upperCanvasEl;
+    // Pointer Events対応ブラウザ（Windows/ChromeOS/Android/iOS Safari 13+ など主要環境は全て対応）
+    // では pointerdown だけで mousedown/touchstart の両方をカバーできる。
+    // 両方に登録すると同じ1回のクリックに対して precomputeInteractionMode が二重に実行され、
+    // クリック回数カウント(clickCount)がずれる原因になるため、環境に応じてどちらか一方のみ登録する。
+    if (window.PointerEvent) {
+      upperCanvasEl.addEventListener('pointerdown', precomputeInteractionMode, { capture: true });
+    } else {
+      upperCanvasEl.addEventListener('mousedown', precomputeInteractionMode, { capture: true });
+      upperCanvasEl.addEventListener('touchstart', precomputeInteractionMode, { capture: true });
+    }
+
     canvas.on('mouse:down', function(opt) {
       const evt = opt.e;
       const target = opt.target;
-      const isCtrlPressed = evt.ctrlKey || evt.metaKey;
+      const isCtrlPressed = evt.ctrlKey || evt.metaKey || isCtrlKeyPhysicallyHeld;
       const isShiftPressed = evt.shiftKey;
+
+      // 直前の操作が何らかの理由（OSジェスチャーへの割り込み、ウィンドウの
+      // フォーカス外れ等）で mouse:up を受け取れずに終わっていた場合に備え、
+      // 新しいクリック開始時には必ずパン状態をリセットしておく。
+      // これをしないと、Ctrlを押して選択したつもりでも、直前のパン状態が
+      // 残ったまま mouse:move で無条件にキャンバスが動いてしまうことがあった
+      // （OSに依存しない構造上のバグ）。
+      isPanDragging = false;
 
       if (!target || target.type !== 'i-text') dummyInput.focus();
 
       if (currentDrawMode === 'eraser' && target && !target.isOriginMark) {
+        // 取り込んだ画像・PDFページは消しゴムのワンタップで即座に消えると
+        // 被害が大きいため、image / i-text だけは誤操作防止の確認を挟む。
+        if ((target.type === 'image' || target.type === 'i-text') &&
+            !confirm('この要素（画像またはテキスト）を削除しますか？')) {
+          return;
+        }
         canvas.remove(target);
         canvas.renderAll();
         saveState();
         return;
       }
 
-      if (isPanLockMode || evt.button === 2 || isShiftPressed) {
-        isPanDragging = true;
-        canvas.isDrawingMode = false;
-        canvas.defaultCursor = 'grabbing';
-        startX = evt.clientX || (evt.touches && evt.touches[0].clientX);
-        startY = evt.clientY || (evt.touches && evt.touches[0].clientY);
-        return;
-      }
-
       if (isCtrlPressed) {
-        canvas.isDrawingMode = false;
+        // Ctrl（Mac は Cmd）は最優先で「選択」の意図として扱う。
+        // macOSでは Ctrl+クリック がOSレベルで「右クリック」として解釈され
+        // evt.button===2 になることがある。以前はパン判定(button===2)が
+        // Ctrl判定より先に評価されていたため、その場合だけ選択のつもりが
+        // パン（Shiftと同じ挙動）になってしまう不安定さの原因だった。
         if (target && !target.isOriginMark) {
           canvas.setActiveObject(target);
           canvas.renderAll();
@@ -679,20 +778,22 @@
         return;
       }
 
-      if (lastTarget === target) clickCount++;
-      else { clickCount = 1; lastTarget = target; }
+      if (isPanLockMode || evt.button === 2 || isShiftPressed) {
+        isPanDragging = true;
+        canvas.defaultCursor = 'grabbing';
+        startX = evt.clientX || (evt.touches && evt.touches[0].clientX);
+        startY = evt.clientY || (evt.touches && evt.touches[0].clientY);
+        return;
+      }
 
-      clearTimeout(clickTimer);
-      clickTimer = setTimeout(() => { clickCount = 0; lastTarget = null; }, 400);
-
+      // クリック回数のカウントは precomputeInteractionMode 側で既に行っているため、
+      // ここでは結果(clickCount / lastTarget)を使って実際の選択処理のみ行う。
       if (target && !target.isOriginMark && target.type === 'path' && clickCount >= 3) {
-        canvas.isDrawingMode = false;
         canvas.setActiveObject(target);
         canvas.renderAll();
         updateDeleteButtonState();
         clickCount = 0;
       } else if (target && !target.isOriginMark && (target.type === 'i-text' || target.type === 'image') && clickCount >= 2) {
-        canvas.isDrawingMode = false;
         canvas.setActiveObject(target);
         if (target.type === 'i-text') {
           target.enterEditing();
@@ -736,6 +837,29 @@
         canvas.isDrawingMode = true;
       }
     });
+
+    // --- パン状態のセーフティネット（OS/ブラウザを問わず有効） ---
+    // OSのジェスチャー割り込みやウィンドウのフォーカス外れなどで、Fabricの
+    // mouse:up / touchend が発火しないままジェスチャーが終わることがある。
+    // その場合に isPanDragging が true のまま残り続けると、次の操作
+    // （Ctrlを押しての選択のつもりの操作を含む）で意図せずパンしてしまう。
+    // ここでは指/ボタンが離れたことを検知できるあらゆるタイミングで
+    // 強制的に状態を復旧させる。
+    function forceResetPanState() {
+      if (!isPanDragging) return;
+      isPanDragging = false;
+      canvas.defaultCursor = 'default';
+      if (!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser') {
+        canvas.isDrawingMode = true;
+      }
+    }
+    window.addEventListener('pointerup', forceResetPanState);
+    window.addEventListener('pointercancel', forceResetPanState);
+    window.addEventListener('mouseup', forceResetPanState);
+    window.addEventListener('touchend', forceResetPanState);
+    window.addEventListener('touchcancel', forceResetPanState);
+    window.addEventListener('blur', forceResetPanState);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) forceResetPanState(); });
 
     canvas.on('selection:created', onSelection);
     canvas.on('selection:updated', onSelection);
@@ -816,6 +940,7 @@
     let history = [];
     let historyStep = -1;
     let isHistoryProcessing = false;
+    const MAX_HISTORY = 30; // 履歴の保持件数上限（画像込みの全体JSONを都度保持するため、無制限だとメモリを圧迫する）
 
     const undoBtn = document.getElementById('undo-btn');
     const redoBtn = document.getElementById('redo-btn');
@@ -826,7 +951,8 @@
 
       const json = JSON.stringify(canvas.toJSON(['isOriginMark']));
       history.push(json);
-      historyStep++;
+      if (history.length > MAX_HISTORY) history.shift(); // 上限を超えたら古い履歴から破棄
+      historyStep = history.length - 1;
 
       pagesData[currentPageIndex] = json;
       updateHistoryButtons();
@@ -896,6 +1022,10 @@
       } else {
         canvas.clear();
         updateCanvasBackground(bgStyleSelect.value);
+        // 新規ページ用に履歴を初期化（前のページの履歴を引き継ぐと、
+        // undo時に別ページの内容が誤って復元されるバグがあったため）
+        history = [];
+        historyStep = -1;
         saveState();
       }
     }
@@ -1004,19 +1134,26 @@
     }
 
     function addImageToCanvas(src) {
-      fabric.Image.fromURL(src, (img) => {
-        if (!img || !img.width) return;
-        const zoom = canvas.getZoom();
-        const maxDim = Math.min(window.innerWidth, window.innerHeight) * 0.5 / zoom;
-        if (img.width > maxDim || img.height > maxDim) img.scaleToWidth(maxDim);
+      // Promiseを返すようにし、呼び出し側で await できるようにする。
+      // 以前は非同期のfromURLコールバックを待たずに次の処理（特にPDF複数ページの
+      // canvas.clear()）が実行されてしまい、画像が違うページに紛れ込んだり
+      // 消えてしまったりするバグがあったため。
+      return new Promise((resolve) => {
+        fabric.Image.fromURL(src, (img) => {
+          if (!img || !img.width) { resolve(); return; }
+          const zoom = canvas.getZoom();
+          const maxDim = Math.min(window.innerWidth, window.innerHeight) * 0.5 / zoom;
+          if (img.width > maxDim || img.height > maxDim) img.scaleToWidth(maxDim);
 
-        const center = getCenterPosition();
-        img.set({ left: center.x - (img.getScaledWidth() / 2), top: center.y - (img.getScaledHeight() / 2) });
-        canvas.add(img);
-        canvas.setActiveObject(img);
-        canvas.renderAll();
-        saveState();
-      }, { crossOrigin: 'anonymous' });
+          const center = getCenterPosition();
+          img.set({ left: center.x - (img.getScaledWidth() / 2), top: center.y - (img.getScaledHeight() / 2) });
+          canvas.add(img);
+          canvas.setActiveObject(img);
+          canvas.renderAll();
+          saveState();
+          resolve();
+        }, { crossOrigin: 'anonymous' });
+      });
     }
 
     async function loadPDFToCanvas(arrayBuffer) {
@@ -1043,9 +1180,12 @@
             updatePageUI();
             canvas.clear();
             updateCanvasBackground(bgStyleSelect.value);
+            history = [];
+            historyStep = -1;
           }
 
-          addImageToCanvas(imgDataUrl);
+          // 前のページへの画像追加が完了するのを待ってから次ページの処理に進む。
+          await addImageToCanvas(imgDataUrl);
         }
       } catch (error) {
         console.error('PDF読み込みエラー:', error);
@@ -1107,6 +1247,7 @@
     }
 
     let saveTimeout = null;
+    let quotaWarned = false;
     function autoSaveLocal() {
       const statusEl = document.getElementById('save-status');
       statusEl.textContent = '💾 保存中...';
@@ -1115,9 +1256,27 @@
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(pagesData));
           statusEl.textContent = '✅ 保存済み';
-        } catch (e) { statusEl.textContent = '⚠️ 保存エラー'; }
+          quotaWarned = false;
+        } catch (e) {
+          statusEl.textContent = '⚠️ 保存エラー';
+          // 容量超過などで自動保存が失敗した場合、気づかず作業を続けて
+          // データを失うことを防ぐため、初回のみ明示的に警告する。
+          if (!quotaWarned) {
+            quotaWarned = true;
+            alert('自動保存に失敗しました。画像やPDFの取り込み量が多く、ブラウザの保存容量上限に達している可能性があります。\n念のため「💾 PNG」または「📄 PDF」で書き出して保存することをおすすめします。');
+          }
+        }
       }, 300);
     }
+
+    // タブを閉じる／リロードする直前に、保留中の自動保存があれば即座に反映する。
+    // デバウンス(300ms)の間にページが閉じられると直前の変更が保存されないバグがあったため。
+    window.addEventListener('beforeunload', () => {
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pagesData)); } catch (e) { /* noop */ }
+      }
+    });
 
     function loadSavedData() {
       const savedData = localStorage.getItem(STORAGE_KEY);
@@ -1138,14 +1297,76 @@
     });
 
     canvas.on('mouse:dblclick', function(options) {
+      // タッチ由来のイベントは下の manualDoubleTapDetector 側で処理するため、
+      // ここではマウス（デスクトップ）由来のダブルクリックのみ扱う。
+      // iOS Safari / Vivaldi 等では touch-action の影響でネイティブ dblclick が
+      // 発火しない、または native のズーム/移動ジェスチャーに化けることがあり、
+      // タッチ操作をこの一本に頼るのは不安定だったため。
+      if (options.e && options.e.pointerType === 'touch') return;
       if (options.target && !options.target.isOriginMark) return;
       const pointer = canvas.getPointer(options.e);
       createNewTextBox(pointer.x, pointer.y);
     });
 
+    // --- タッチ端末向け：自前のダブルタップ検出 ---
+    // ネイティブ dblclick に依存しないことで、iOS Safari / Vivaldi 等で
+    // ダブルタップ時に文字入力ではなく画面ズーム/移動が起きてしまう問題を回避する。
+    let lastTapTime = 0;
+    let lastTapPos = null;
+    let tapStartPos = null;
+
+    upperCanvasEl.addEventListener('touchstart', function(e) {
+      // タップ開始位置を記録（連続する手書きストロークの指離しを
+      // 誤ってダブルタップと判定しないための基準点として使う）
+      tapStartPos = (e.touches.length === 1)
+        ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+        : null;
+    }, { passive: true });
+
+    upperCanvasEl.addEventListener('touchend', function(e) {
+      if (e.changedTouches.length !== 1 || e.touches.length !== 0) { lastTapTime = 0; lastTapPos = null; tapStartPos = null; return; }
+      const touch = e.changedTouches[0];
+      const now = Date.now();
+      const pos = { x: touch.clientX, y: touch.clientY };
+
+      // 開始位置からほとんど動いていない場合のみ「タップ」として扱う。
+      // これがないと、近い位置で素早く連続して線を描いた際の指離しを
+      // ダブルタップと誤認識し、意図せずテキストボックスが生成されてしまう。
+      const isTap = tapStartPos && Math.abs(pos.x - tapStartPos.x) < 10 && Math.abs(pos.y - tapStartPos.y) < 10;
+      tapStartPos = null;
+      if (!isTap) { lastTapTime = 0; lastTapPos = null; return; }
+
+      const isDoubleTap = lastTapPos && (now - lastTapTime) < 350 &&
+        Math.abs(pos.x - lastTapPos.x) < 24 && Math.abs(pos.y - lastTapPos.y) < 24;
+
+      if (isDoubleTap) {
+        lastTapTime = 0;
+        lastTapPos = null;
+        const target = canvas.findTarget(e, false);
+        if (target && !target.isOriginMark) return; // 既存要素の上は無視（選択/編集操作に譲る）
+        if (e.cancelable) e.preventDefault(); // ネイティブのズーム等を確実に打ち消す
+        const pointer = canvas.getPointer(e);
+        createNewTextBox(pointer.x, pointer.y);
+      } else {
+        lastTapTime = now;
+        lastTapPos = pos;
+      }
+    }, { passive: false });
+
     window.addEventListener('keydown', (e) => {
       const activeObject = canvas.getActiveObject();
       if (activeObject && activeObject.isEditing) return;
+
+      // ツールバー内の入力欄（文字サイズ、色、フォント選択など）にフォーカスがある間は
+      // このハンドラで横取りしない。横取りすると入力欄に数字が打てず、
+      // 代わりにキャンバス上へテキストボックスが生成されてしまうバグがあったため。
+      const activeEl = document.activeElement;
+      const isToolbarField = activeEl && activeEl !== dummyInput &&
+        (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT' || activeEl.tagName === 'TEXTAREA');
+      if (isToolbarField) return;
+
+      // ヘルプなどのモーダル表示中も同様に無視する
+      if (document.querySelector('.modal-overlay.active')) return;
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); return; }
@@ -1157,7 +1378,23 @@
       if (document.activeElement !== dummyInput) dummyInput.focus();
     });
 
-    dummyInput.addEventListener('input', () => {
+    // IME（日本語入力）変換中は input イベントを処理しない。
+    // 変換確定前の未確定文字列でテキストボックスを生成してしまうと、
+    // 生成直後に focus が新テキストボックス側の内部textareaへ移ってしまい、
+    // IMEの変換候補ウィンドウとフォーカス位置がズレて文字化け・入力中断が起きるため。
+    let isComposing = false;
+    dummyInput.addEventListener('compositionstart', () => { isComposing = true; });
+    dummyInput.addEventListener('compositionend', () => {
+      isComposing = false;
+      handleDummyInputCommit();
+    });
+
+    dummyInput.addEventListener('input', (e) => {
+      if (isComposing || e.isComposing) return; // IME変換中はスキップ
+      handleDummyInputCommit();
+    });
+
+    function handleDummyInputCommit() {
       const val = dummyInput.value;
       if (!val) return;
       const center = getCenterPosition();
@@ -1180,7 +1417,7 @@
       }
       dummyInput.value = '';
       saveState();
-    });
+    }
 
     function createNewTextBox(x, y) {
       const text = new fabric.IText('', {
@@ -1331,7 +1568,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.11     Created by フジイヨウスケ with Gemini</div>
+    <div class="footer-text">Ver.0.115     Created by フジイヨウスケ with Gemini</div>
   </div>
 
 </body>
