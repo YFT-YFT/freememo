@@ -22,13 +22,74 @@
 
   <!-- サービスワーカーの登録 -->
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-          .then(reg => console.log('SW registered!'))
-          .catch(err => console.log('SW registration failed:', err));
+    // --- 強制キャッシュクリアの判定 ---
+    // 通常はオフラインでも使えるよう積極的にキャッシュを使うが、以下の場合だけは
+    // 「最新版が反映されない」ことを避けるため、キャッシュを破棄して最新を取得する。
+    //   (a) ブラウザの更新ボタンを15秒以内に3回押した
+    //   (b) ブラウザを閉じてから7200秒以上経過して再度開いた
+    // それ以外（うっかり1回更新した／うっかり閉じてすぐ開き直した等）は、
+    // 従来通りキャッシュから読み込み、作業中の状態をなるべく保つ。
+    // ※ ここで扱うのはservice worker側のキャッシュ（アプリ本体のファイル）だけで、
+    //    ノート内容（localStorageの手書き・テキストデータ）には一切触れない。
+    (function() {
+      const RELOAD_TRACK_KEY = 'penteki_reload_times';
+      const LAST_UNLOAD_KEY = 'penteki_last_unload_ts';
+      const now = Date.now();
+
+      function forceClearCacheAndReload() {
+        try { sessionStorage.removeItem(RELOAD_TRACK_KEY); } catch (e) {}
+        const tasks = [];
+        if ('serviceWorker' in navigator) {
+          tasks.push(navigator.serviceWorker.getRegistrations()
+            .then(regs => Promise.all(regs.map(r => r.unregister())))
+            .catch(() => {}));
+        }
+        if ('caches' in window) {
+          tasks.push(caches.keys()
+            .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+            .catch(() => {}));
+        }
+        Promise.all(tasks).finally(() => {
+          const url = new URL(location.href);
+          url.searchParams.set('_fresh', String(Date.now()));
+          location.replace(url.toString());
+        });
+      }
+
+      try {
+        // (b) 7200秒以上閉じてから再度開いた場合
+        const lastUnload = parseInt(localStorage.getItem(LAST_UNLOAD_KEY) || '0', 10);
+        if (lastUnload && (now - lastUnload) >= 7200000) {
+          forceClearCacheAndReload();
+          return;
+        }
+      } catch (e) { /* localStorageが使えない環境では何もしない */ }
+
+      try {
+        // (a) 15秒以内に更新ボタンを3回押した場合
+        let times = JSON.parse(sessionStorage.getItem(RELOAD_TRACK_KEY) || '[]');
+        times = times.filter(t => now - t < 15000);
+        times.push(now);
+        if (times.length >= 3) {
+          forceClearCacheAndReload();
+          return;
+        }
+        sessionStorage.setItem(RELOAD_TRACK_KEY, JSON.stringify(times));
+      } catch (e) { /* sessionStorageが使えない環境では何もしない */ }
+
+      // 通常の更新／終了時刻を記録しておく（次回起動時の判定に使う）
+      window.addEventListener('beforeunload', () => {
+        try { localStorage.setItem(LAST_UNLOAD_KEY, String(Date.now())); } catch (e) {}
       });
-    }
+
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js')
+            .then(reg => console.log('SW registered!'))
+            .catch(err => console.log('SW registration failed:', err));
+        });
+      }
+    })();
   </script>
 
   <style>
@@ -304,6 +365,7 @@
         <button id="pen-mode-btn" class="toggle-btn active" title="標準ペン">✏️ ペン</button>
         <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️ マーカー</button>
         <button id="eraser-mode-btn" class="toggle-btn" title="要素消しゴム">🧹 消しゴム</button>
+        <button id="select-mode-btn" class="toggle-btn" title="選択モード（オブジェクトの移動・削除）">👆 選択</button>
       </div>
 
       <!-- ペン設定 -->
@@ -480,6 +542,10 @@
 
     let currentDrawMode = 'pen';
     let isPanLockMode = false;
+    // 選択モード（トグルボタン）。ONの間は常に isDrawingMode=false になり、
+    // 1回のタップ/クリックだけでオブジェクトの選択・移動ができるようにする。
+    // スマホ・タブレット等キーボードのない端末でも確実に選択できるようにするための機能。
+    let isSelectMode = false;
 
     const canvas = new fabric.Canvas('c', {
       width: window.innerWidth,
@@ -564,7 +630,7 @@
         isTwoFingerTouch = false;
         touchStartDist = 0;
         
-        if (!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser') {
+        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') {
           canvas.isDrawingMode = true;
         }
       }
@@ -641,12 +707,12 @@
       const width = parseInt(penWidthInput.value, 10);
 
       if (currentDrawMode === 'pen') {
-        canvas.isDrawingMode = !isPanLockMode;
+        canvas.isDrawingMode = !isPanLockMode && !isSelectMode;
         canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
         canvas.freeDrawingBrush.color = color;
         canvas.freeDrawingBrush.width = width;
       } else if (currentDrawMode === 'highlighter') {
-        canvas.isDrawingMode = !isPanLockMode;
+        canvas.isDrawingMode = !isPanLockMode && !isSelectMode;
         canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
         let hex = color.replace('#', '');
         if(hex.length === 3) hex = hex.split('').map(c => c + c).join('');
@@ -674,14 +740,20 @@
     // 押されているか」を独自に保持しておき、クリック側の判定に併用する。
     let isCtrlKeyPhysicallyHeld = false;
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Control' || e.key === 'Meta') isCtrlKeyPhysicallyHeld = true;
+      if (e.key === 'Control' || e.key === 'Meta') {
+        isCtrlKeyPhysicallyHeld = true;
+        updateSelectModeIndicator();
+      }
     }, { capture: true });
     window.addEventListener('keyup', (e) => {
-      if (e.key === 'Control' || e.key === 'Meta') isCtrlKeyPhysicallyHeld = false;
+      if (e.key === 'Control' || e.key === 'Meta') {
+        isCtrlKeyPhysicallyHeld = false;
+        updateSelectModeIndicator();
+      }
     }, { capture: true });
     // ウィンドウがフォーカスを失うと keyup を取りこぼす可能性があるため、その際は
     // 保持している状態を安全側（押されていない）にリセットする。
-    window.addEventListener('blur', () => { isCtrlKeyPhysicallyHeld = false; });
+    window.addEventListener('blur', () => { isCtrlKeyPhysicallyHeld = false; updateSelectModeIndicator(); });
 
     // --- 選択モードの判定を「キャプチャフェーズ」で先に確定させる ---
     // Fabric.js は isDrawingMode=true の状態で mouse:down (touchstart/mousedown) を受け取ると、
@@ -698,7 +770,7 @@
       const isShift = e.shiftKey;
       const isRightClick = e.button === 2;
 
-      if (isPanLockMode || isRightClick || isShift || isCtrl) {
+      if (isPanLockMode || isSelectMode || isRightClick || isShift || isCtrl) {
         canvas.isDrawingMode = false;
         return;
       }
@@ -760,6 +832,8 @@
         }
         canvas.remove(target);
         canvas.renderAll();
+        updateDeleteButtonState();
+        updateSelectModeIndicator();
         saveState();
         return;
       }
@@ -826,14 +900,14 @@
       if (isPanDragging) {
         canvas.setViewportTransform(canvas.viewportTransform);
         isPanDragging = false;
-        if (!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser') {
+        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') {
           canvas.isDrawingMode = true;
         }
         canvas.defaultCursor = 'default';
         return;
       }
 
-      if (!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser') {
+      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') {
         canvas.isDrawingMode = true;
       }
     });
@@ -849,7 +923,7 @@
       if (!isPanDragging) return;
       isPanDragging = false;
       canvas.defaultCursor = 'default';
-      if (!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser') {
+      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') {
         canvas.isDrawingMode = true;
       }
     }
@@ -864,8 +938,9 @@
     canvas.on('selection:created', onSelection);
     canvas.on('selection:updated', onSelection);
     canvas.on('selection:cleared', function() {
-      if (!isPanLockMode && currentDrawMode !== 'eraser') canvas.isDrawingMode = true;
+      if (!isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') canvas.isDrawingMode = true;
       updateDeleteButtonState();
+      updateSelectModeIndicator();
     });
 
     function onSelection(e) {
@@ -875,6 +950,7 @@
         fontSizeInput.value = activeObject.fontSize || 22;
       }
       updateDeleteButtonState();
+      updateSelectModeIndicator();
     }
 
     canvas.on('mouse:wheel', function(opt) {
@@ -888,6 +964,7 @@
     const penModeBtn = document.getElementById('pen-mode-btn');
     const highlighterModeBtn = document.getElementById('highlighter-mode-btn');
     const eraserModeBtn = document.getElementById('eraser-mode-btn');
+    const selectModeBtn = document.getElementById('select-mode-btn');
     const touchPanLockBtn = document.getElementById('touch-pan-lock-btn');
 
     function setDrawMode(mode) {
@@ -895,18 +972,79 @@
       penModeBtn.classList.toggle('active', mode === 'pen');
       highlighterModeBtn.classList.toggle('active', mode === 'highlighter');
       eraserModeBtn.classList.toggle('active', mode === 'eraser');
+      // ペン/マーカー/消しゴムなど明示的な描画ツールを選んだら、選択モードは自動的に解除する
+      if (isSelectMode) {
+        isSelectMode = false;
+        selectModeBtn.classList.remove('active');
+      }
       applyBrushSettings();
+      updateSelectModeIndicator();
     }
 
     penModeBtn.addEventListener('click', () => setDrawMode('pen'));
     highlighterModeBtn.addEventListener('click', () => setDrawMode('highlighter'));
     eraserModeBtn.addEventListener('click', () => setDrawMode('eraser'));
 
+    // --- 選択モード（トグルボタン） ---
+    // ONの間は常に isDrawingMode=false になり、1回のタップ/クリックで
+    // オブジェクトの選択・移動ができる。もう一度ボタンを押すか、
+    // 何もない場所をダブルタップ/ダブルクリックすると描画モードに戻る。
+    selectModeBtn.addEventListener('click', () => {
+      isSelectMode = !isSelectMode;
+      if (isSelectMode && isPanLockMode) {
+        // 画面移動固定とは意味が競合するため、選択モードON時はOFFにする
+        isPanLockMode = false;
+        touchPanLockBtn.classList.remove('active');
+      }
+      if (!isSelectMode) {
+        // 選択モードを明示的に終了したときは、選択状態も一緒に解除する。
+        // これをしないと「選択中のオブジェクトがある」という別条件のせいで
+        // ボタンが光ったままになり、OFFにしたのに戻っていないように見えてしまう。
+        canvas.discardActiveObject();
+        canvas.renderAll();
+      }
+      selectModeBtn.classList.toggle('active', isSelectMode);
+      applyBrushSettings();
+      updateDeleteButtonState();
+      updateSelectModeIndicator();
+    });
+
     touchPanLockBtn.addEventListener('click', () => {
       isPanLockMode = !isPanLockMode;
+      if (isPanLockMode && isSelectMode) {
+        // 選択モードとは意味が競合するため、画面移動固定ON時はOFFにする
+        isSelectMode = false;
+        selectModeBtn.classList.remove('active');
+      }
       touchPanLockBtn.classList.toggle('active', isPanLockMode);
       applyBrushSettings();
+      updateSelectModeIndicator();
     });
+
+    // --- 選択モードボタンの見た目インジケーター ---
+    // ボタンを押して選択モードにした場合だけでなく、Ctrlキーを押している間や、
+    // 連打（ダブルタップ/トリプルタップ）でオブジェクトを選択できている間も、
+    // 同じボタンを光らせて「今は選択できる状態です」とわかりやすくする。
+    function updateSelectModeIndicator() {
+      const isActivelySelecting = isSelectMode ||
+        isCtrlKeyPhysicallyHeld ||
+        (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser');
+      selectModeBtn.classList.toggle('active', isActivelySelecting);
+    }
+
+    // 選択モード中に「何もない場所」をダブルタップ/ダブルクリックしたときは、
+    // 新規テキストを作るのではなく描画モードへ戻す。戻した場合は true を返す。
+    function exitSelectModeIfActive() {
+      if (!isSelectMode) return false;
+      isSelectMode = false;
+      selectModeBtn.classList.remove('active');
+      canvas.discardActiveObject();
+      canvas.renderAll();
+      applyBrushSettings();
+      updateDeleteButtonState();
+      updateSelectModeIndicator();
+      return true;
+    }
 
     document.getElementById('shape-select').addEventListener('change', (e) => {
       const shapeType = e.target.value;
@@ -1236,6 +1374,7 @@
         canvas.discardActiveObject();
         canvas.renderAll();
         updateDeleteButtonState();
+        updateSelectModeIndicator();
         saveState();
       }
     }
@@ -1304,6 +1443,7 @@
       // タッチ操作をこの一本に頼るのは不安定だったため。
       if (options.e && options.e.pointerType === 'touch') return;
       if (options.target && !options.target.isOriginMark) return;
+      if (exitSelectModeIfActive()) return;
       const pointer = canvas.getPointer(options.e);
       createNewTextBox(pointer.x, pointer.y);
     });
@@ -1345,6 +1485,7 @@
         const target = canvas.findTarget(e, false);
         if (target && !target.isOriginMark) return; // 既存要素の上は無視（選択/編集操作に譲る）
         if (e.cancelable) e.preventDefault(); // ネイティブのズーム等を確実に打ち消す
+        if (exitSelectModeIfActive()) return;
         const pointer = canvas.getPointer(e);
         createNewTextBox(pointer.x, pointer.y);
       } else {
@@ -1568,7 +1709,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.115     Created by フジイヨウスケ with Gemini</div>
+    <div class="footer-text">Ver.0.116     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
