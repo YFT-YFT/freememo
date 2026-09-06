@@ -26,7 +26,7 @@
     // 通常はオフラインでも使えるよう積極的にキャッシュを使うが、以下の場合だけは
     // 「最新版が反映されない」ことを避けるため、キャッシュを破棄して最新を取得する。
     //   (a) ブラウザの更新ボタンを15秒以内に3回押した
-    //   (b) ブラウザを閉じてから7200秒以上経過して再度開いた
+    //   (b) ブラウザを閉じてから30秒以上経過して再度開いた
     // それ以外（うっかり1回更新した／うっかり閉じてすぐ開き直した等）は、
     // 従来通りキャッシュから読み込み、作業中の状態をなるべく保つ。
     // ※ ここで扱うのはservice worker側のキャッシュ（アプリ本体のファイル）だけで、
@@ -57,9 +57,9 @@
       }
 
       try {
-        // (b) 7200秒以上閉じてから再度開いた場合
+        // (b) 30秒以上閉じてから再度開いた場合
         const lastUnload = parseInt(localStorage.getItem(LAST_UNLOAD_KEY) || '0', 10);
-        if (lastUnload && (now - lastUnload) >= 7200000) {
+        if (lastUnload && (now - lastUnload) >= 30000) {
           forceClearCacheAndReload();
           return;
         }
@@ -476,7 +476,7 @@
     </div>
   </div>
 
-  <div id="guide-text">🔲 Ctrl+ドラッグ: 範囲選択 | 🖐️ 右クリック/Shift/2本指: 画面移動</div>
+  <div id="guide-text">👆 選択ボタン/長押し/Ctrl+ドラッグ: 選択・移動 | 🖐️ 右クリック/Shift/2本指スワイプ: 画面移動 | 🤏 2本指ピンチ: 拡大縮小</div>
 
   <textarea id="canvas-dummy-input" aria-hidden="true"></textarea>
   <canvas id="c"></canvas>
@@ -491,6 +491,16 @@
         <ul>
           <li><b>手書き（ペン・マーカー）</b>: 画面上をドラッグ（指やペンでなぞる）すると、いつでも自由に手書きができます。上部メニューで線の「色」や「太さ」を自由に調整できます。</li>
           <li><b>キーボードで文字入力</b>: 画面上の入力したい場所を<b>ダブルクリック（またはダブルタップ）</b>すると、その場所に文字を入力できます。フォントやサイズ、文字色の変更も可能です。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>👆 オブジェクトの選択・移動・削除</h4>
+        <ul>
+          <li><b>選択モードボタン</b>: メニューの「👆 選択」を押すとON。ONの間は1回のタップ/クリックだけで手書き線・文字・画像を選択でき、そのままドラッグで移動できます。もう一度押すか、何もない場所をダブルタップ/ダブルクリックすると描画モードに戻ります。</li>
+          <li><b>長押し（約0.7秒）</b>: キーボードがない端末でも、選択したい対象を指で押さえたまま少し待つと選択できます（対応端末では振動でお知らせします）。指を離した後、改めてドラッグすると移動できます。</li>
+          <li><b>Ctrl（Macは⌘）+ クリック/ドラッグ</b>: パソコンで、押している間だけ選択モードとして扱われます。</li>
+          <li><b>削除</b>: 選択した状態で「🗑️」ボタン、またはキーボードの Delete / Backspace で削除できます。</li>
         </ul>
       </div>
 
@@ -524,7 +534,6 @@
         <ul>
           <li><b>Ctrl + Z</b>: 1つ前の操作を取り消す（元に戻す）</li>
           <li><b>Ctrl + Y</b>: 取り消した操作をやり直す</li>
-          <li><b>Ctrl + ドラッグ</b>: 描画したオブジェクト（文字や図形）をまとめて範囲選択</li>
           <li><b>Delete / Backspace</b>: 選択中のオブジェクトを削除</li>
         </ul>
       </div>
@@ -776,8 +785,11 @@
       }
 
       // クリック/タップ位置に既存オブジェクトがあるかを事前判定し、
-      // 連続クリック（パス3回連打・テキストや画像2回連打）のときは
+      // 連続クリック（テキストや画像への2回連打＝編集を開く）のときは
       // Fabricが描画を開始する前に isDrawingMode を切っておく。
+      // 手書き線(path)の選択は、以前はここで3回連打を要求していたが、
+      // タイミングがシビアで不安定なため廃止し、長押し／選択モードボタン／
+      // Ctrlクリックに一本化した。
       let target = null;
       try { target = canvas.findTarget(e, false); } catch (err) { target = null; }
 
@@ -788,7 +800,6 @@
 
       const willSelect = target && !target.isOriginMark && (
         canvas.getActiveObject() === target || // 既に選択中のオブジェクトへの単純クリック＆ドラッグは常に「移動」として扱う
-        (target.type === 'path' && clickCount >= 3) ||
         ((target.type === 'i-text' || target.type === 'image') && clickCount >= 2)
       );
 
@@ -806,6 +817,59 @@
       upperCanvasEl.addEventListener('mousedown', precomputeInteractionMode, { capture: true });
       upperCanvasEl.addEventListener('touchstart', precomputeInteractionMode, { capture: true });
     }
+
+    // --- 長押し（約0.7秒）で選択に入る ---
+    // Ctrlキーのない端末（タブレット等）でも、対象を押さえたまま少し待つだけで
+    // 選択できるようにする。Fabricは指を置いた瞬間に内部でフリードローを開始して
+    // しまうため、その最中に isDrawingMode を直接いじると描画状態が壊れる恐れがある。
+    // そこで、長押しが成立しても「今すぐ」は何もせず、押さえた内容を保留しておき、
+    // 実際の反映は自然な mouse:up（Fabric自身の描画終了処理の後）まで遅らせている。
+    let longPressTimer = null;
+    let longPressStartPos = null;
+    let pendingLongPressAction = null;
+    const LONG_PRESS_MS = 700;
+    const LONG_PRESS_MOVE_TOLERANCE = 10;
+
+    function cancelLongPress() {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      longPressStartPos = null;
+    }
+
+    function startLongPressWatch(e) {
+      if (currentDrawMode === 'eraser' || isPanLockMode || isSelectMode) return;
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 2) return;
+      const touch = e.touches && e.touches[0];
+      const x = touch ? touch.clientX : e.clientX;
+      const y = touch ? touch.clientY : e.clientY;
+      longPressStartPos = { x, y };
+      longPressTimer = setTimeout(() => {
+        if (!longPressStartPos) return;
+        const target = canvas.findTarget(e, false);
+        pendingLongPressAction = (target && !target.isOriginMark)
+          ? { type: 'select', target }
+          : { type: 'selectMode' };
+        if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
+        longPressStartPos = null;
+      }, LONG_PRESS_MS);
+    }
+
+    function checkLongPressMove(e) {
+      if (!longPressStartPos) return;
+      const touch = e.touches && e.touches[0];
+      const x = touch ? touch.clientX : e.clientX;
+      const y = touch ? touch.clientY : e.clientY;
+      if (Math.abs(x - longPressStartPos.x) > LONG_PRESS_MOVE_TOLERANCE || Math.abs(y - longPressStartPos.y) > LONG_PRESS_MOVE_TOLERANCE) {
+        cancelLongPress();
+      }
+    }
+
+    upperCanvasEl.addEventListener('touchstart', (e) => { if (e.touches.length === 1) startLongPressWatch(e); }, { capture: true, passive: true });
+    upperCanvasEl.addEventListener('mousedown', (e) => { if (e.button === 0) startLongPressWatch(e); }, { capture: true });
+    upperCanvasEl.addEventListener('touchmove', checkLongPressMove, { capture: true, passive: true });
+    upperCanvasEl.addEventListener('mousemove', checkLongPressMove, { capture: true });
+    upperCanvasEl.addEventListener('touchend', cancelLongPress, { capture: true });
+    upperCanvasEl.addEventListener('mouseup', cancelLongPress, { capture: true });
+    window.addEventListener('blur', cancelLongPress);
 
     canvas.on('mouse:down', function(opt) {
       const evt = opt.e;
@@ -862,12 +926,8 @@
 
       // クリック回数のカウントは precomputeInteractionMode 側で既に行っているため、
       // ここでは結果(clickCount / lastTarget)を使って実際の選択処理のみ行う。
-      if (target && !target.isOriginMark && target.type === 'path' && clickCount >= 3) {
-        canvas.setActiveObject(target);
-        canvas.renderAll();
-        updateDeleteButtonState();
-        clickCount = 0;
-      } else if (target && !target.isOriginMark && (target.type === 'i-text' || target.type === 'image') && clickCount >= 2) {
+      // 手書き線(path)の3回連打による選択は廃止（長押し等に統一）。
+      if (target && !target.isOriginMark && (target.type === 'i-text' || target.type === 'image') && clickCount >= 2) {
         canvas.setActiveObject(target);
         if (target.type === 'i-text') {
           target.enterEditing();
@@ -897,6 +957,25 @@
     });
 
     canvas.on('mouse:up', function() {
+      // 保留していた長押しアクションを、Fabric自身の描画終了処理が
+      // 完了した後（=このタイミング）で安全に反映する。
+      if (pendingLongPressAction) {
+        const action = pendingLongPressAction;
+        pendingLongPressAction = null;
+        if (action.type === 'select') {
+          canvas.setActiveObject(action.target);
+        } else {
+          isSelectMode = true;
+          selectModeBtn.classList.add('active');
+        }
+        isPanDragging = false;
+        applyBrushSettings();
+        canvas.renderAll();
+        updateDeleteButtonState();
+        updateSelectModeIndicator();
+        return;
+      }
+
       if (isPanDragging) {
         canvas.setViewportTransform(canvas.viewportTransform);
         isPanDragging = false;
@@ -1023,7 +1102,7 @@
 
     // --- 選択モードボタンの見た目インジケーター ---
     // ボタンを押して選択モードにした場合だけでなく、Ctrlキーを押している間や、
-    // 連打（ダブルタップ/トリプルタップ）でオブジェクトを選択できている間も、
+    // ダブルタップ/長押しでオブジェクトを選択できている間も、
     // 同じボタンを光らせて「今は選択できる状態です」とわかりやすくする。
     function updateSelectModeIndicator() {
       const isActivelySelecting = isSelectMode ||
@@ -1709,7 +1788,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.116     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.117     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
