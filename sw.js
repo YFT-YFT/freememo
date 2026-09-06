@@ -1,4 +1,4 @@
-const CACHE_NAME = 'penteki-v1';
+const CACHE_NAME = 'penteki-v2';
 // キャッシュしておきたいファイルの一覧
 const ASSETS_TO_CACHE = [
   './',
