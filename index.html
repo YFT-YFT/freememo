@@ -25,10 +25,9 @@
     // --- 強制キャッシュクリアの判定 ---
     // 通常はオフラインでも使えるよう積極的にキャッシュを使うが、以下の場合だけは
     // 「最新版が反映されない」ことを避けるため、キャッシュを破棄して最新を取得する。
-    //   (a) ブラウザの更新ボタンを15秒以内に3回押した
-    //   (b) ブラウザを閉じてから30秒以上経過して再度開いた
-    // それ以外（うっかり1回更新した／うっかり閉じてすぐ開き直した等）は、
-    // 従来通りキャッシュから読み込み、作業中の状態をなるべく保つ。
+    //   ブラウザの更新ボタンを15秒以内に3回押した
+    // それ以外（うっかり1回更新した等）は、従来通りキャッシュから読み込み、
+    // 作業中の状態をなるべく保つ。
     // ※ ここで扱うのはservice worker側のキャッシュ（アプリ本体のファイル）だけで、
     //    ノート内容（localStorageの手書き・テキストデータ）には一切触れない。
     //
@@ -47,7 +46,6 @@
       if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
 
       const RELOAD_TRACK_KEY = 'penteki_reload_times';
-      const LAST_UNLOAD_KEY = 'penteki_last_unload_ts';
       const LAST_FORCE_CLEAR_KEY = 'penteki_last_force_clear_ts';
       const FORCE_CLEAR_COOLDOWN_MS = 15000; // この時間内は再度の強制リロードを行わない
       const now = Date.now();
@@ -82,16 +80,7 @@
       }
 
       try {
-        // (b) 30秒以上閉じてから再度開いた場合
-        const lastUnload = parseInt(localStorage.getItem(LAST_UNLOAD_KEY) || '0', 10);
-        if (lastUnload && (now - lastUnload) >= 30000) {
-          forceClearCacheAndReload('30s-close-reopen');
-          return;
-        }
-      } catch (e) { /* localStorageが使えない環境では何もしない */ }
-
-      try {
-        // (a) 15秒以内に更新ボタンを3回押した場合
+        // 15秒以内に更新ボタンを3回押した場合
         let times = JSON.parse(sessionStorage.getItem(RELOAD_TRACK_KEY) || '[]');
         times = times.filter(t => now - t < 15000);
         times.push(now);
@@ -101,11 +90,6 @@
         }
         sessionStorage.setItem(RELOAD_TRACK_KEY, JSON.stringify(times));
       } catch (e) { /* sessionStorageが使えない環境では何もしない */ }
-
-      // 通常の更新／終了時刻を記録しておく（次回起動時の判定に使う）
-      window.addEventListener('beforeunload', () => {
-        try { localStorage.setItem(LAST_UNLOAD_KEY, String(Date.now())); } catch (e) {}
-      });
 
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -161,7 +145,11 @@
       flex: 1;
       overflow-x: auto;
       white-space: nowrap;
-      padding-right: 8px;
+      /* 右側に常時浮いている .btn-fixed-right（横並び時、目安幅330px）と
+         スクロール内の最後のボタンが重ならないよう、余白を確保しておく。
+         スマホ幅では固定エリアがツールバーの下に移動するため不要になる
+         （下の @media 内で 0 に上書きする）。 */
+      padding-right: 340px;
       scrollbar-width: thin;
       scrollbar-color: #007bff #f1f3f5;
       -webkit-overflow-scrolling: touch;
@@ -172,15 +160,54 @@
     .tool-scroll-area::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 2px; }
     .tool-scroll-area::-webkit-scrollbar-thumb { background: #007bff; border-radius: 2px; }
 
-    /* 右側常時固定エリア (❓ボタンのみ) */
+    /* 右側常時固定エリア：#toolbarの兄弟要素になったため、常に position:fixed で
+       ビューポート基準の右上に配置する（デスクトップでは横一列、ツールバーの
+       右端に接するように見せる）。 */
     .btn-fixed-right {
+      position: fixed;
+      top: 8px;
+      right: 8px;
       display: flex;
       align-items: center;
-      flex-shrink: 0;
-      padding-left: 8px;
-      border-left: 1px solid #dee2e6;
+      gap: 6px;
       background: rgba(255, 255, 255, 0.95);
-      z-index: 3;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      backdrop-filter: blur(8px);
+      padding: 6px 8px;
+      z-index: 10;
+    }
+
+    /* スマホ幅（iPhone等）では、固定エリアが横長のままだと横スクロール領域が
+       ほとんど見えなくなってしまう。そこで固定エリアをツールバー本体から切り離し、
+       画面右上に独立した「1列の縦並び」として浮かせて配置する。
+       （2列グリッドは横幅を取りすぎて逆に使いにくかったため1列に変更） */
+    @media (max-width: 600px) {
+      .tool-scroll-area { padding-right: 0; }
+      .btn-fixed-right {
+        position: fixed;
+        top: 64px;
+        right: 8px;
+        left: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        width: auto;
+        border-left: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+        padding: 5px;
+        z-index: 10;
+      }
+      .btn-fixed-right button {
+        min-width: 34px;
+        padding: 6px;
+        font-size: 13px;
+      }
+      .btn-fixed-right .status-badge {
+        text-align: center;
+        white-space: nowrap;
+      }
     }
 
     .tool-group {
@@ -357,7 +384,6 @@
     .modal-content ul { padding-left: 20px; line-height: 1.6; font-size: 13px; margin: 4px 0; color: #444; }
 
     @media (max-width: 768px) {
-      .status-badge { display: none; }
       #guide-text { display: none; }
     }
 
@@ -385,15 +411,16 @@
   <div id="toolbar">
     <!-- 横スクロール可能エリア（すべてのツールを格納） -->
     <div class="tool-scroll-area">
-      <!-- 筆記モード -->
+      <!-- 1. 描画ツール（最も頻繁に使うため先頭に配置） -->
       <div class="tool-group">
-        <button id="pen-mode-btn" class="toggle-btn active" title="標準ペン">✏️ ペン</button>
-        <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️ マーカー</button>
-        <button id="eraser-mode-btn" class="toggle-btn" title="要素消しゴム">🧹 消しゴム</button>
-        <button id="select-mode-btn" class="toggle-btn" title="選択モード（オブジェクトの移動・削除）">👆 選択</button>
+        <button id="pen-mode-btn" class="toggle-btn active" title="標準ペン">✏️</button>
+        <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️</button>
+        <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（なぞった部分の要素を消します）">🧹</button>
+        <button id="select-mode-btn" class="toggle-btn" title="選択モード（ONの間、1回のタップ/クリックでオブジェクトを選択・移動できます）">👆 選択</button>
+        <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップすると線で接続します。接続された要素は動かしても線が繋がったままになります）">🔗 コネクタ</button>
       </div>
 
-      <!-- ペン設定 -->
+      <!-- 2. ペン設定（直前の描画ツールに直結する設定） -->
       <div class="tool-group">
         <div class="tool-item" title="ペンの色">
           <span>色:</span>
@@ -406,7 +433,7 @@
         </div>
       </div>
 
-      <!-- 図形追加 -->
+      <!-- 3. 挿入（図形・画像/PDFなど、キャンバスに新しく何かを追加する操作をまとめる） -->
       <div class="tool-group">
         <div class="tool-item" title="図形挿入">
           <span>図形:</span>
@@ -418,9 +445,13 @@
             <option value="circle">円</option>
           </select>
         </div>
+        <label class="file-label" title="画像・PDFを挿入">
+          🖼️ 挿入
+          <input type="file" id="img-file-input" accept="image/*,application/pdf">
+        </label>
       </div>
 
-      <!-- テキスト設定 -->
+      <!-- 4. テキスト設定 -->
       <div class="tool-group">
         <div class="tool-item" title="フォント選択">
           <span>文字:</span>
@@ -452,7 +483,7 @@
         </div>
       </div>
 
-      <!-- 背景・ファイル・移動固定 -->
+      <!-- 5. 画面・背景（キャンバス全体の見え方に関する設定） -->
       <div class="tool-group">
         <div class="tool-item" title="背景色">
           <span>背景:</span>
@@ -463,14 +494,10 @@
             <option value="#1e1e1e">ダーク（方眼）</option>
           </select>
         </div>
-        <label class="file-label" title="画像・PDFを挿入">
-          📁 ファイル
-          <input type="file" id="img-file-input" accept="image/*,application/pdf">
-        </label>
         <button id="touch-pan-lock-btn" class="toggle-btn" title="画面スクロール固定">✋ 移動固定</button>
       </div>
 
-      <!-- ページ切り替え -->
+      <!-- 6. ページ管理 -->
       <div class="tool-group">
         <div class="page-control">
           <button id="prev-page-btn" class="step-btn" title="前ページ">◀</button>
@@ -481,24 +508,28 @@
         </div>
       </div>
 
-      <!-- 画面表示補助・操作履歴・保存・削除 -->
+      <!-- 7. 出力・消去（頻度が低く、消去は誤操作防止のため他から離して末尾に配置） -->
       <div class="tool-group">
-        <button id="reset-view-btn" class="center-btn" title="初期位置（中央）へ戻す">🎯</button>
-        <button id="fit-content-btn" class="fit-btn" title="全描画を画面に収める">🔍</button>
-        <button id="undo-btn" class="history-btn" disabled title="元に戻す (Ctrl+Z)">↩️</button>
-        <button id="redo-btn" class="history-btn" disabled title="やり直す (Ctrl+Y)">↪️</button>
-        <button id="delete-selected-btn" class="delete-btn" disabled title="選択オブジェクトを削除">🗑️</button>
         <button id="export-btn" title="全描画をPNG画像保存">💾 PNG</button>
         <button id="export-pdf-btn" class="pdf-btn" title="全描画をPDF出力">📄 PDF</button>
-        <button id="clear-btn" class="clear-btn" title="ページ全削除">⚠️ 全消去</button>
-        <span id="save-status" class="status-badge">🔄 復元完了</span>
+        <button id="clear-btn" class="clear-btn" title="このページの描画内容だけを消去します">🗑️ このページを消去</button>
+        <button id="clear-all-btn" class="clear-btn" title="すべてのページの描画内容を消去します（元に戻せません）">⚠️ 全ページ消去</button>
       </div>
     </div>
+  </div>
 
-    <!-- 右側常時固定エリア (❓ヘルプボタンのみ) -->
-    <div class="btn-fixed-right">
-      <button id="help-btn" class="toggle-btn" style="background:#e2e3e5;" title="使い方ガイド">❓</button>
-    </div>
+  <!-- 右側常時固定エリア：画面サイズに関わらず常に見えるべき操作をまとめる。
+       #toolbar内に置くと backdrop-filter + overflow:hidden の影響で
+       position:fixed の基準が viewport ではなく #toolbar になってしまい、
+       画面外（切り取られた状態）に隠れてしまうため、意図的に兄弟要素にしている。 -->
+  <div class="btn-fixed-right">
+    <button id="delete-selected-btn" class="delete-btn" disabled title="選択オブジェクトを削除">🗑️</button>
+    <button id="reset-view-btn" class="center-btn" title="初期位置（中央）へ戻す">🎯</button>
+    <button id="fit-content-btn" class="fit-btn" title="全描画を画面に収める">🔍</button>
+    <button id="undo-btn" class="history-btn" disabled title="元に戻す (Ctrl+Z)">↩️</button>
+    <button id="redo-btn" class="history-btn" disabled title="やり直す (Ctrl+Y)">↪️</button>
+    <span id="save-status" class="status-badge">🔄 復元完了</span>
+    <button id="help-btn" class="toggle-btn" style="background:#e2e3e5;" title="使い方ガイド">❓</button>
   </div>
 
   <div id="guide-text">👆 選択ボタン/長押し/Ctrl+ドラッグ: 選択・移動 | 🖐️ 右クリック/Shift/2本指スワイプ: 画面移動 | 🤏 2本指ピンチ: 拡大縮小</div>
@@ -515,6 +546,7 @@
         <h4>✏️ 基本の書き込み方法</h4>
         <ul>
           <li><b>手書き（ペン・マーカー）</b>: 画面上をドラッグ（指やペンでなぞる）すると、いつでも自由に手書きができます。上部メニューで線の「色」や「太さ」を自由に調整できます。</li>
+          <li><b>図形として自動整形</b>: 標準ペンで直線・円・四角形・三角形・五角形などに近い形を描き、描き終わりの位置でペンを画面につけたまま約1秒保持してから離すと、自動できれいな図形に変換されます（判定に自信が持てない場合は手書きのまま残ります）。保持せずすぐ離した場合は図形化を試みないため、ひらがとなど手書き文字が誤って図形化されにくくなっています。多角形にしたい場合は、角にしたい場所で0.1〜0.2秒ほど止まりながら描くと認識しやすくなります。閉じきっていなくても「閉じようとしている」形であれば認識されます。</li>
           <li><b>キーボードで文字入力</b>: 画面上の入力したい場所を<b>ダブルクリック（またはダブルタップ）</b>すると、その場所に文字を入力できます。フォントやサイズ、文字色の変更も可能です。</li>
         </ul>
       </div>
@@ -523,6 +555,7 @@
         <h4>👆 オブジェクトの選択・移動・削除</h4>
         <ul>
           <li><b>選択モードボタン</b>: メニューの「👆 選択」を押すとON。ONの間は1回のタップ/クリックだけで手書き線・文字・画像を選択でき、そのままドラッグで移動できます。もう一度押すか、何もない場所をダブルタップ/ダブルクリックすると描画モードに戻ります。</li>
+          <li><b>固定（ロック）</b>: 長押しで要素を選択すると、その近くに🔒マークが表示されます。タップすると、その要素だけ移動・選択ができないよう固定されます（半透明で表示）。固定された要素を再び長押しすると、今度は🔓マークが表示され、タップで固定解除できます。取り込んだ画像などを誤って動かしたくないときに便利です。</li>
           <li><b>長押し（約0.7秒）</b>: キーボードがない端末でも、選択したい対象を指で押さえたまま少し待つと選択できます（対応端末では振動でお知らせします）。指を離した後、改めてドラッグすると移動できます。</li>
           <li><b>Ctrl（Macは⌘）+ クリック/ドラッグ</b>: パソコンで、押している間だけ選択モードとして扱われます。</li>
           <li><b>削除</b>: 選択した状態で「🗑️」ボタン、またはキーボードの Delete / Backspace で削除できます。</li>
@@ -664,7 +697,7 @@
         isTwoFingerTouch = false;
         touchStartDist = 0;
         
-        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') {
+        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') {
           canvas.isDrawingMode = true;
         }
       }
@@ -678,7 +711,7 @@
       transparentCorners: false,
       cornerColor: '#007bff',
       cornerStrokeColor: '#ffffff',
-      borderColor: '#007bff',
+      borderColor: '#0d3b8c', // 視認性向上のため、以前(#007bff)より濃い青に変更
       cornerSize: 10,
       padding: 6,
       borderDashArray: [4, 4]
@@ -696,7 +729,7 @@
       ctx.fillRect(0, 0, GRID_SIZE, GRID_SIZE);
 
       const isDark = (bgColor === '#1e1e1e');
-      const lineColor = isDark ? '#2d2d2d' : 'rgba(0, 0, 0, 0.06)';
+      const lineColor = isDark ? '#3d3d3d' : 'rgba(0, 0, 0, 0.13)'; // 視認性向上のため以前より濃くした
 
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = 1;
@@ -740,6 +773,10 @@
       const color = penColorInput.value;
       const width = parseInt(penWidthInput.value, 10);
 
+      // 消しゴムモード中は、なぞって連続的に消す操作を四角い範囲選択と
+      // 誤認識させないよう、Fabric標準の範囲選択（マーキー選択）を無効化する。
+      canvas.selection = (currentDrawMode !== 'eraser' && currentDrawMode !== 'connector');
+
       if (currentDrawMode === 'pen') {
         canvas.isDrawingMode = !isPanLockMode && !isSelectMode;
         canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
@@ -761,6 +798,7 @@
     }
 
     let isPanDragging = false;
+    let isErasingDrag = false; // 消しゴムでなぞって連続的に消している最中かどうか
     let startX, startY;
     let clickCount = 0, clickTimer = null, lastTarget = null;
 
@@ -823,7 +861,7 @@
       clearTimeout(clickTimer);
       clickTimer = setTimeout(() => { clickCount = 0; lastTarget = null; }, 400);
 
-      const willSelect = target && !target.isOriginMark && (
+      const willSelect = target && !target.isOriginMark && !target.isLocked && (
         canvas.getActiveObject() === target || // 既に選択中のオブジェクトへの単純クリック＆ドラッグは常に「移動」として扱う
         ((target.type === 'i-text' || target.type === 'image') && clickCount >= 2)
       );
@@ -855,6 +893,47 @@
     const LONG_PRESS_MS = 700;
     const LONG_PRESS_MOVE_TOLERANCE = 10;
 
+    // --- ロックアイコン ---
+    // 長押しでオブジェクトを選択した際、その近くに🔒（固定する）/🔓（固定解除する）
+    // アイコンを一時的に表示する。タップすると固定状態がトグルされる。
+    // 専用の「固定モード」ボタンは廃止し、長押し選択時にだけ出す方式にした。
+    let activeLockIcon = null;
+    let lockIconAutoHideTimer = null;
+
+    function removeLockIcon() {
+      if (activeLockIcon) {
+        canvas.remove(activeLockIcon);
+        activeLockIcon = null;
+        canvas.renderAll();
+      }
+      if (lockIconAutoHideTimer) { clearTimeout(lockIconAutoHideTimer); lockIconAutoHideTimer = null; }
+    }
+
+    function showLockIconFor(target) {
+      removeLockIcon();
+      if (!target || target.isOriginMark) return;
+      const bounds = target.getBoundingRect(true, true); // キャンバス座標系での境界
+      const icon = new fabric.Text(target.isLocked ? '🔓' : '🔒', {
+        // 対象オブジェクトの当たり判定（targetFindTolerance）と重ならないよう、
+        // 十分な余白（20px）を取って配置する
+        left: bounds.left + bounds.width + 20,
+        top: bounds.top - 14,
+        fontSize: 26,
+        selectable: false,
+        evented: true,
+        hoverCursor: 'pointer',
+        originX: 'center',
+        originY: 'center'
+      });
+      icon.lockIconFor = target;
+      canvas.add(icon);
+      canvas.bringToFront(icon);
+      canvas.renderAll();
+      activeLockIcon = icon;
+      // 数秒間タップされなければ自動的に消す
+      lockIconAutoHideTimer = setTimeout(() => { removeLockIcon(); }, 4000);
+    }
+
     function cancelLongPress() {
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       longPressStartPos = null;
@@ -870,6 +949,9 @@
       longPressTimer = setTimeout(() => {
         if (!longPressStartPos) return;
         const target = canvas.findTarget(e, false);
+        // 固定済みのオブジェクトも対象に含める（固定解除のためにロックアイコンを
+        // 表示する必要があるため）。実際に選択状態にする(setActiveObject)かどうかは
+        // mouse:up側で isLocked を見て判断する。
         pendingLongPressAction = (target && !target.isOriginMark)
           ? { type: 'select', target }
           : { type: 'selectMode' };
@@ -909,6 +991,10 @@
       // 残ったまま mouse:move で無条件にキャンバスが動いてしまうことがあった
       // （OSに依存しない構造上のバグ）。
       isPanDragging = false;
+      isErasingDrag = false; // 前回のドラッグ状態が万一残っていても、新しい操作開始時に必ずリセットする
+
+      // ロックアイコン以外の場所をクリックした場合は、表示中のロックアイコンを消す
+      if (activeLockIcon && target !== activeLockIcon) removeLockIcon();
 
       // 「どこでもすぐ物理キーボードで入力できる」機能のためにダミー入力欄へ
       // フォーカスしているが、これはあくまで物理キーボード向けの機能。
@@ -919,18 +1005,50 @@
       const isTouchOriginated = !!(evt.touches || evt.changedTouches || evt.pointerType === 'touch');
       if (!isTouchOriginated && (!target || target.type !== 'i-text')) dummyInput.focus();
 
-      if (currentDrawMode === 'eraser' && target && !target.isOriginMark) {
-        // 取り込んだ画像・PDFページは消しゴムのワンタップで即座に消えると
-        // 被害が大きいため、image / i-text だけは誤操作防止の確認を挟む。
-        if ((target.type === 'image' || target.type === 'i-text') &&
-            !confirm('この要素（画像またはテキスト）を削除しますか？')) {
-          return;
+      // ロックアイコン（長押し選択時に表示される🔒/🔓）がタップされた場合の処理。
+      // 対象オブジェクトの固定/固定解除をトグルする。固定中は selectable=false にして
+      // 「選択モードでも間違って動かない／そもそも選択されない」を実現しつつ、
+      // evented は true のままにして、再度ロングプレスで解除できるようにする。
+      if (target && target === activeLockIcon) {
+        const obj = target.lockIconFor;
+        if (obj) {
+          if (obj.isLocked) {
+            obj.set({
+              selectable: true,
+              opacity: (typeof obj._preLockOpacity === 'number') ? obj._preLockOpacity : 1,
+              isLocked: false
+            });
+            delete obj._preLockOpacity;
+          } else {
+            obj._preLockOpacity = (typeof obj.opacity === 'number') ? obj.opacity : 1;
+            obj.set({
+              selectable: false,
+              opacity: Math.min(obj._preLockOpacity, 0.5),
+              isLocked: true
+            });
+            canvas.discardActiveObject();
+          }
+          updateDeleteButtonState();
+          saveState();
         }
-        canvas.remove(target);
+        removeLockIcon();
         canvas.renderAll();
-        updateDeleteButtonState();
-        updateSelectModeIndicator();
-        saveState();
+        return;
+      }
+
+      if (currentDrawMode === 'eraser') {
+        // なぞって連続的に消せるように、ドラッグ中フラグを立てる。
+        // 実際の削除処理はここと mouse:move の両方で行う（最初に触れた場所と、
+        // その後なぞった場所の両方でオブジェクトを消せるようにするため）。
+        // 誤操作防止の確認ダイアログは、連続してなぞる操作の妨げになるため廃止し、
+        // 代わりに元に戻す(Ctrl+Z)でいつでも復元できることを安全網とする。
+        isErasingDrag = true;
+        if (target && !target.isOriginMark && !target.isLocked) {
+          canvas.remove(target);
+          canvas.renderAll();
+          updateDeleteButtonState();
+          updateSelectModeIndicator();
+        }
         return;
       }
 
@@ -940,7 +1058,7 @@
         // evt.button===2 になることがある。以前はパン判定(button===2)が
         // Ctrl判定より先に評価されていたため、その場合だけ選択のつもりが
         // パン（Shiftと同じ挙動）になってしまう不安定さの原因だった。
-        if (target && !target.isOriginMark) {
+        if (target && !target.isOriginMark && !target.isLocked) {
           canvas.setActiveObject(target);
           canvas.renderAll();
           updateDeleteButtonState();
@@ -959,7 +1077,7 @@
       // クリック回数のカウントは precomputeInteractionMode 側で既に行っているため、
       // ここでは結果(clickCount / lastTarget)を使って実際の選択処理のみ行う。
       // 手書き線(path)の3回連打による選択は廃止（長押し等に統一）。
-      if (target && !target.isOriginMark && (target.type === 'i-text' || target.type === 'image') && clickCount >= 2) {
+      if (target && !target.isOriginMark && !target.isLocked && (target.type === 'i-text' || target.type === 'image') && clickCount >= 2) {
         canvas.setActiveObject(target);
         if (target.type === 'i-text') {
           target.enterEditing();
@@ -986,16 +1104,39 @@
           startY = clientY;
         }
       }
+
+      // 消しゴムでなぞっている最中、通過した場所のオブジェクトを連続的に消す
+      if (isErasingDrag && currentDrawMode === 'eraser') {
+        const target = canvas.findTarget(evt, false);
+        if (target && !target.isOriginMark && !target.isLocked) {
+          canvas.remove(target);
+          canvas.renderAll();
+          updateDeleteButtonState();
+          updateSelectModeIndicator();
+        }
+      }
     });
 
     canvas.on('mouse:up', function() {
+      // 消しゴムでのなぞり操作が終わったら、ここでまとめて1回だけ保存する
+      // （なぞっている最中に毎回保存すると重くなるため）。
+      if (isErasingDrag) {
+        isErasingDrag = false;
+        saveState();
+      }
+
       // 保留していた長押しアクションを、Fabric自身の描画終了処理が
       // 完了した後（=このタイミング）で安全に反映する。
       if (pendingLongPressAction) {
         const action = pendingLongPressAction;
         pendingLongPressAction = null;
         if (action.type === 'select') {
-          canvas.setActiveObject(action.target);
+          // 固定済みのオブジェクトは selectable=false のため選択状態にはしない
+          // （ロックアイコンだけを表示し、固定解除の入口として使う）。
+          if (!action.target.isLocked) {
+            canvas.setActiveObject(action.target);
+          }
+          showLockIconFor(action.target);
         } else {
           isSelectMode = true;
           selectModeBtn.classList.add('active');
@@ -1011,14 +1152,14 @@
       if (isPanDragging) {
         canvas.setViewportTransform(canvas.viewportTransform);
         isPanDragging = false;
-        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') {
+        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') {
           canvas.isDrawingMode = true;
         }
         canvas.defaultCursor = 'default';
         return;
       }
 
-      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') {
+      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') {
         canvas.isDrawingMode = true;
       }
     });
@@ -1031,10 +1172,14 @@
     // ここでは指/ボタンが離れたことを検知できるあらゆるタイミングで
     // 強制的に状態を復旧させる。
     function forceResetPanState() {
+      if (isErasingDrag) {
+        isErasingDrag = false;
+        saveState();
+      }
       if (!isPanDragging) return;
       isPanDragging = false;
       canvas.defaultCursor = 'default';
-      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') {
+      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') {
         canvas.isDrawingMode = true;
       }
     }
@@ -1049,7 +1194,14 @@
     canvas.on('selection:created', onSelection);
     canvas.on('selection:updated', onSelection);
     canvas.on('selection:cleared', function() {
-      if (!isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser') canvas.isDrawingMode = true;
+      if (!isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') canvas.isDrawingMode = true;
+      // 注意: ここで removeLockIcon() は呼ばない。
+      // ロックアイコン（選択不可のオブジェクト）をタップすると、Fabricは内部処理として
+      // 先に「直前の選択」を解除するため、この selection:cleared がアイコンのタップより
+      // 前に発火してしまう。ここで消してしまうと、mouse:down 側の
+      // 「タップ位置がアイコンかどうか」の判定より先にアイコンが消えてしまい、
+      // タップが効かなくなる不具合になる。アイコンの消去は、mouse:down 側の
+      // 「アイコン以外の場所をクリックしたら消す」判定だけに一本化している。
       updateDeleteButtonState();
       updateSelectModeIndicator();
     });
@@ -1076,6 +1228,7 @@
     const highlighterModeBtn = document.getElementById('highlighter-mode-btn');
     const eraserModeBtn = document.getElementById('eraser-mode-btn');
     const selectModeBtn = document.getElementById('select-mode-btn');
+    const connectorBtn = document.getElementById('connector-btn');
     const touchPanLockBtn = document.getElementById('touch-pan-lock-btn');
 
     function setDrawMode(mode) {
@@ -1083,10 +1236,17 @@
       penModeBtn.classList.toggle('active', mode === 'pen');
       highlighterModeBtn.classList.toggle('active', mode === 'highlighter');
       eraserModeBtn.classList.toggle('active', mode === 'eraser');
-      // ペン/マーカー/消しゴムなど明示的な描画ツールを選んだら、選択モードは自動的に解除する
+      connectorBtn.classList.toggle('active', mode === 'connector');
+      // ペン/マーカー/消しゴムなど明示的なツールを選んだら、選択モードは自動的に解除する
       if (isSelectMode) {
         isSelectMode = false;
         selectModeBtn.classList.remove('active');
+      }
+      // コネクタモードから離れる場合、選択待ちだった1つ目の要素の見た目を元に戻す
+      if (mode !== 'connector' && pendingConnectorSource) {
+        pendingConnectorSource.set({ stroke: pendingConnectorSource._connOrigStroke });
+        canvas.renderAll();
+        pendingConnectorSource = null;
       }
       applyBrushSettings();
       updateSelectModeIndicator();
@@ -1095,6 +1255,7 @@
     penModeBtn.addEventListener('click', () => setDrawMode('pen'));
     highlighterModeBtn.addEventListener('click', () => setDrawMode('highlighter'));
     eraserModeBtn.addEventListener('click', () => setDrawMode('eraser'));
+    connectorBtn.addEventListener('click', () => setDrawMode('connector'));
 
     // --- 選択モード（トグルボタン） ---
     // ONの間は常に isDrawingMode=false になり、1回のタップ/クリックで
@@ -1139,7 +1300,7 @@
     function updateSelectModeIndicator() {
       const isActivelySelecting = isSelectMode ||
         isCtrlKeyPhysicallyHeld ||
-        (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser');
+        (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector');
       selectModeBtn.classList.toggle('active', isActivelySelecting);
     }
 
@@ -1166,15 +1327,32 @@
       let shape;
 
       if (shapeType === 'line') {
-        shape = new fabric.Line([-50, 0, 50, 0], { stroke: color, strokeWidth: 3, left: center.x, top: center.y });
+        shape = new fabric.Line([-50, 0, 50, 0], { stroke: color, strokeWidth: 3, left: center.x, top: center.y, originX: 'center', originY: 'center' });
       } else if (shapeType === 'arrow') {
-        const line = new fabric.Line([-40, 0, 40, 0], { stroke: color, strokeWidth: 3 });
-        const triangle = new fabric.Triangle({ width: 12, height: 12, fill: color, left: 40, top: 0, angle: 90, originX: 'center', originY: 'center' });
-        shape = new fabric.Group([line, triangle], { left: center.x, top: center.y });
+        // 矢印（矢軸＋矢頭）: 矢頭の底辺の中心に矢軸の先端がぴったり合うよう、
+        // 座標を直接計算して配置する（グリッド線を重ねた描画検証で、
+        // 軸と矢頭の中心が数学的に一致していることを確認済み）。
+        // また、グループ自体もクリック位置＝図形の視覚的中心となるよう
+        // originX/Y を 'center' にする（以前は左上基準になっており、
+        // 挿入位置と見た目の中心がズレる一因になっていた）。
+        const headLength = 16;
+        const headHalfWidth = 7;
+        const totalLength = 90;
+        const shaftEndX = totalLength / 2 - headLength; // 矢頭の底辺のx座標
+        const tipX = totalLength / 2;                   // 矢頭の先端のx座標
+        const shaftStartX = -totalLength / 2;
+
+        const line = new fabric.Line([shaftStartX, 0, shaftEndX, 0], { stroke: color, strokeWidth: 3 });
+        const head = new fabric.Polygon([
+          { x: shaftEndX, y: -headHalfWidth },
+          { x: tipX, y: 0 },
+          { x: shaftEndX, y: headHalfWidth }
+        ], { fill: color, stroke: color, strokeWidth: 1, strokeLineJoin: 'round' });
+        shape = new fabric.Group([line, head], { left: center.x, top: center.y, originX: 'center', originY: 'center' });
       } else if (shapeType === 'rect') {
-        shape = new fabric.Rect({ width: 100, height: 60, fill: 'transparent', stroke: color, strokeWidth: 3, left: center.x, top: center.y });
+        shape = new fabric.Rect({ width: 100, height: 60, fill: 'transparent', stroke: color, strokeWidth: 3, left: center.x, top: center.y, originX: 'center', originY: 'center' });
       } else if (shapeType === 'circle') {
-        shape = new fabric.Circle({ radius: 40, fill: 'transparent', stroke: color, strokeWidth: 3, left: center.x, top: center.y });
+        shape = new fabric.Circle({ radius: 40, fill: 'transparent', stroke: color, strokeWidth: 3, left: center.x, top: center.y, originX: 'center', originY: 'center' });
       }
 
       if (shape) {
@@ -1198,7 +1376,7 @@
       if (isHistoryProcessing) return;
       if (historyStep < history.length - 1) history = history.slice(0, historyStep + 1);
 
-      const json = JSON.stringify(canvas.toJSON(['isOriginMark']));
+      const json = JSON.stringify(canvas.toJSON(['isOriginMark', 'isLocked', '_preLockOpacity', 'selectable']));
       history.push(json);
       if (history.length > MAX_HISTORY) history.shift(); // 上限を超えたら古い履歴から破棄
       historyStep = history.length - 1;
@@ -1540,9 +1718,377 @@
     }
 
     canvas.on('object:modified', saveState);
+    // ============================================================
+    // 図形認識・線の整形機能
+    // 「✨ 図形認識」ツールで描いた手書きの線を解析し、直線・円/楕円・
+    // 四角形・多角形として自信を持って判定できた場合のみ、きれいな図形に
+    // 自動的に置き換える。判定に自信が持てない場合は手書きのまま残す
+    // （誤変換で意図しない形になるより、変換しない方が安全なため）。
+    // ============================================================
+
+    // Ramer-Douglas-Peucker法による折れ線の簡略化。
+    // ノイズの多い手書きの点列から、形の特徴を表す少数の頂点だけを抽出する。
+    function rdpSimplify(points, epsilon) {
+      if (points.length < 3) return points.slice();
+      let dmax = 0, index = 0;
+      const first = points[0], last = points[points.length - 1];
+      for (let i = 1; i < points.length - 1; i++) {
+        const d = perpendicularDistance(points[i], first, last);
+        if (d > dmax) { dmax = d; index = i; }
+      }
+      if (dmax > epsilon) {
+        const left = rdpSimplify(points.slice(0, index + 1), epsilon);
+        const right = rdpSimplify(points.slice(index), epsilon);
+        return left.slice(0, -1).concat(right);
+      }
+      return [first, last];
+    }
+
+    function perpendicularDistance(p, a, b) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy);
+      if (len === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+      return Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / len;
+    }
+
+    // Fabric.jsのPath(pathプロパティ=SVG風コマンド配列)から、線分の端点を抽出する。
+    function extractPathPoints(fabricPath) {
+      const pts = [];
+      (fabricPath.path || []).forEach(cmd => {
+        const type = cmd[0];
+        if (type === 'M' || type === 'L') pts.push({ x: cmd[1], y: cmd[2] });
+        else if (type === 'Q') pts.push({ x: cmd[3], y: cmd[4] });
+        else if (type === 'C') pts.push({ x: cmd[5], y: cmd[6] });
+      });
+      return pts;
+    }
+
+    function getBBoxOfPoints(pts) {
+      const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
+    }
+
+    // 各頂点における内角（度）を計算する（閉多角形想定）。
+    function cornerAngles(corners) {
+      const n = corners.length;
+      const angles = [];
+      for (let i = 0; i < n; i++) {
+        const prev = corners[(i - 1 + n) % n], cur = corners[i], next = corners[(i + 1) % n];
+        const v1 = { x: prev.x - cur.x, y: prev.y - cur.y };
+        const v2 = { x: next.x - cur.x, y: next.y - cur.y };
+        const dot = v1.x * v2.x + v1.y * v2.y;
+        const mag = Math.hypot(v1.x, v1.y) * Math.hypot(v2.x, v2.y);
+        const angle = mag === 0 ? 0 : Math.acos(Math.max(-1, Math.min(1, dot / mag))) * 180 / Math.PI;
+        angles.push(angle);
+      }
+      return angles;
+    }
+
+    // RDPで簡略化した頂点の中には、実際には「ほぼ直線の途中」に過ぎない
+    // 疑似的な頂点が残ることがある（閉曲線の始点/終点付近など）。
+    // 内角が非常に大きい（＝ほぼ一直線）頂点を繰り返し取り除き、
+    // 図形が本来持つ実質的な頂点数に近づける。
+    function pruneStraightCorners(corners, straightAngleThreshold) {
+      let pts = corners.slice();
+      let changed = true;
+      while (changed && pts.length > 3) {
+        changed = false;
+        const angles = cornerAngles(pts);
+        for (let i = 0; i < angles.length; i++) {
+          if (angles[i] > straightAngleThreshold) {
+            pts.splice(i, 1);
+            changed = true;
+            break;
+          }
+        }
+      }
+      return pts;
+    }
+
+    // 手書きパスを解析し、認識できた図形の種類と情報を返す。
+    // 自信を持って判定できない場合は null を返す（＝手書きのまま残す）。
+    // timingVertices: 描画中に「約0.2秒その場で止まった」場所として検出した
+    // 頂点候補（キャンバス座標）。指定があれば、幾何学的な単純化より優先して
+    // 頂点として使う（ユーザーが意図的に角を作ろうとした証拠のため）。
+    function recognizeShapeFromPath(fabricPath, timingVertices) {
+      const rawPts = extractPathPoints(fabricPath);
+      if (rawPts.length < 3) return null;
+
+      // Fabricのpath座標はpathOffsetを基準にしているため、絶対座標(0,0起点)に補正する
+      const offsetX = fabricPath.pathOffset ? fabricPath.pathOffset.x : 0;
+      const offsetY = fabricPath.pathOffset ? fabricPath.pathOffset.y : 0;
+      const pts = rawPts.map(p => ({ x: p.x - offsetX, y: p.y - offsetY }));
+
+      const bbox = getBBoxOfPoints(pts);
+      const diag = Math.hypot(bbox.width, bbox.height);
+      if (diag < 20) return null; // 小さすぎる走り書きは対象外
+
+      // 図形化のためにペンを保持している間、Fabricは動きがほぼ無くても細かい
+      // 手ブレをそのまま点として記録し続ける。これらは同じ場所に密集した
+      // 「ノイズの塊」になり、そのまま形状判定に使うと様々な計算が狂う原因に
+      // なる（分散が実際より大きく出る、簡略化後の頂点数が増える、等）。
+      // そのため、以降の幾何学的な判定はすべてこの間引き済みの点群を使う。
+      const dedupedPts = dedupNearbyVertices(pts, 5);
+
+      const start = pts[0], end = pts[pts.length - 1];
+      const closeDist = Math.hypot(end.x - start.x, end.y - start.y);
+      // 「閉じようとしている」ことを緩やかに判定する。厳密に閉じていなくても、
+      // 始点と終点がある程度近ければ「閉じるつもりだった」とみなす。
+      const isRoughlyClosed = closeDist < diag * 0.35;
+
+      const hasTimingVertices = timingVertices && timingVertices.length >= 3;
+
+      // --- 円/楕円判定（頂点タイミングが検出されなかった場合のみ、幾何学的に判定） ---
+      // タイミング頂点（＝0.1〜0.2秒はっきり止まった場所）が検出されている場合は、
+      // ユーザーが意図的に置いた頂点として最優先で信頼する。
+      let stdRatio = null;
+      if (isRoughlyClosed && !hasTimingVertices) {
+        const cx = dedupedPts.reduce((s, p) => s + p.x, 0) / dedupedPts.length;
+        const cy = dedupedPts.reduce((s, p) => s + p.y, 0) / dedupedPts.length;
+        const dists = dedupedPts.map(p => Math.hypot(p.x - cx, p.y - cy));
+        const meanR = dists.reduce((a, b) => a + b, 0) / dists.length;
+        const variance = dists.reduce((s, d) => s + (d - meanR) ** 2, 0) / dists.length;
+        stdRatio = meanR === 0 ? 1 : Math.sqrt(variance) / meanR;
+      }
+
+      // --- 直線判定（閉じておらず、意図的な頂点も置かれていない場合） ---
+      if (!isRoughlyClosed && !hasTimingVertices) {
+        const epsilon = Math.max(diag * 0.06, 4);
+        const simplified = rdpSimplify(dedupedPts, epsilon);
+        if (simplified.length <= 3) {
+          return { type: 'line', points: [start, end], bbox };
+        }
+        return null; // 未閉曲線かつ単純な直線でもない場合は対象外（曖昧な形は変換しない）
+      }
+
+      // --- 頂点候補の決定（頂点タイミングがない場合は、円判定より先に計算しておく） ---
+      let corners;
+      if (hasTimingVertices) {
+        // 描画中に0.1〜0.2秒程度その場で止まった場所＝ユーザーが意図的に
+        // 置いた頂点として、そのまま信頼して使う。
+        corners = timingVertices.map(v => ({ x: v.x - offsetX, y: v.y - offsetY }));
+      } else {
+        const epsilon = Math.max(diag * 0.06, 4);
+        let simplified = rdpSimplify(dedupedPts, epsilon);
+        corners = simplified.slice();
+        if (corners.length > 1) {
+          const f = corners[0], l = corners[corners.length - 1];
+          if (Math.hypot(f.x - l.x, f.y - l.y) < diag * 0.1) corners = corners.slice(0, -1);
+        }
+        // ほぼ直線の途中に過ぎない疑似的な頂点（始点/終点の繋ぎ目など）を除去する
+        if (corners.length > 3) corners = pruneStraightCorners(corners, 145);
+      }
+
+      // --- 円/楕円判定（緩め）：頂点タイミングがない場合、多角形分割より先に判定する ---
+      // 一時停止せず一筆書きで描いた閉曲線は、RDP簡略化後の頂点数が偶然
+      // 少なくなることがあり、頂点数だけに判定を依存させると円を多角形と
+      // 誤判定してしまうことがあった。そのため点群のばらつき(stdRatio)を
+      // 主な根拠にするが、それだけでは正方形に近い四角形も「丸い」と
+      // 誤判定してしまうことがわかった。また、RDP簡略化後の頂点の角度も、
+      // 円を多めの頂点で近似した場合と少ない辺数の多角形とで数値が重なって
+      // しまい、区別の決め手にならなかった。
+      // そこで「本当に直線的な辺を持つ図形かどうか」を、通常よりずっと
+      // 厳しい固定の許容量(3px)でRDP簡略化して確認する。真の多角形は
+      // 辺が直線なので、許容量を厳しくしても頂点数はほぼ変わらない。
+      // 一方、円のような曲線は、許容量を厳しくするほど多くの頂点が
+      // 必要になる。この性質の違いを円/多角形の判定材料にする。
+      if (!hasTimingVertices) {
+        const strictSimplified = rdpSimplify(dedupedPts, 3);
+        const looksLikePolygon = strictSimplified.length <= 8;
+        if (!looksLikePolygon && stdRatio !== null && stdRatio < 0.2 && pts.length >= 15) {
+          return { type: 'ellipse', bbox };
+        }
+      }
+
+      // --- 四角形／多角形判定：頂点数と角度で判定（五角形以上の多角形にも対応） ---
+      // 3角形〜10角形を対象とする（6角形以上は認識精度が完璧ではないものの、
+      // 「試みてくれる」方が使い勝手が良いとのご判断によりVer.0.121の挙動に戻した）
+      if (corners.length >= 3 && corners.length <= 10) {
+        const angles = cornerAngles(corners);
+        const rightish = angles.filter(a => Math.abs(a - 90) < 30).length;
+        if (corners.length === 4 && rightish >= 3) {
+          return { type: 'rect', bbox };
+        }
+        // 3角形〜10角形は一般の多角形として扱う
+        return { type: 'polygon', points: corners };
+      }
+
+      return null; // 自信を持てない場合は変換しない
+    }
+
+    // 認識結果に基づき、元の手書きパスをきれいな図形オブジェクトに置き換える。
+    // 色・太さ・不透明度は元のパスから引き継ぐ。
+    function convertPathToShapeIfRecognized(fabricPath, timingVertices) {
+      const recog = recognizeShapeFromPath(fabricPath, timingVertices);
+      if (!recog) return false;
+
+      const commonProps = {
+        stroke: fabricPath.stroke,
+        strokeWidth: fabricPath.strokeWidth,
+        fill: 'transparent',
+        opacity: fabricPath.opacity,
+      };
+      // Path同様、Polygon/Rect/EllipseもFabricの座標系では left/top がそのまま
+      // 図形の絶対位置を表す一方、認識結果の点群(recog.points/bbox)は
+      // pathOffset(＝手書き線の境界ボックス中心)を基準にしたローカル座標になっている。
+      // そのため「fabricPath.left + 幅/2」を中心の絶対座標として使い、そこへ
+      // ローカル座標を足すことで正しい絶対位置に変換する。
+      const offsetX = fabricPath.left + fabricPath.width / 2;
+      const offsetY = fabricPath.top + fabricPath.height / 2;
+      let shapeObj = null;
+
+      if (recog.type === 'line') {
+        const p1 = recog.points[0], p2 = recog.points[1];
+        shapeObj = new fabric.Line([offsetX + p1.x, offsetY + p1.y, offsetX + p2.x, offsetY + p2.y], commonProps);
+      } else if (recog.type === 'ellipse') {
+        const b = recog.bbox;
+        shapeObj = new fabric.Ellipse({
+          left: offsetX + b.left, top: offsetY + b.top,
+          rx: b.width / 2, ry: b.height / 2,
+          ...commonProps
+        });
+      } else if (recog.type === 'rect') {
+        const b = recog.bbox;
+        shapeObj = new fabric.Rect({
+          left: offsetX + b.left, top: offsetY + b.top,
+          width: b.width, height: b.height,
+          ...commonProps
+        });
+      } else if (recog.type === 'polygon') {
+        // 絶対座標の点をそのまま渡し、left/topはFabricに自動計算させる
+        const pts = recog.points.map(p => ({ x: offsetX + p.x, y: offsetY + p.y }));
+        shapeObj = new fabric.Polygon(pts, commonProps);
+      }
+
+      if (!shapeObj) return false;
+      canvas.remove(fabricPath);
+      canvas.add(shapeObj);
+      canvas.requestRenderAll();
+      saveState();
+      return true;
+    }
+
+    // --- 描画中の「頂点タイミング検出」 ---
+    // ペンで描いている最中、ある場所で約0.15秒はっきりと動きが止まったら、
+    // そこを「意図的に置いた頂点」の候補として記録する。多角形認識の精度向上に使う。
+    // 円をゆっくり描いた際の自然な手ブレを誤って頂点と判定しないよう、
+    // 停止とみなす移動許容量(px)は小さめに保っている。
+    //
+    // 「図形化を確定させるための保持」はこれとは別のトラッカーで判定する。
+    // 人の手は数百ms〜1秒も完全に静止し続けることは物理的に難しく、わずかな
+    // 震え（数px程度）が必ず入る。頂点検出と同じ厳しい許容量を使い回すと、
+    // その震えのたびに保持時間がゼロにリセットされてしまい、実際には
+    // 保持しているつもりでも図形化がほぼ発動しない不具合になっていた。
+    // そのため、図形化確定の判定だけは許容量を大きく（緩く）している。
+    let currentStrokeVertices = [];
+    let strokePauseCandidate = null;
+    let confirmHoldCandidate = null;
+    let isTrackingStroke = false;
+    const VERTEX_PAUSE_MS = 150;
+    const VERTEX_MOVE_TOLERANCE = 4;
+    const SHAPE_CONFIRM_MOVE_TOLERANCE = 12; // 図形化確定の判定用（頂点検出より緩い＝手ブレを許容）
+
+    function resetStrokeVertexTracking() {
+      currentStrokeVertices = [];
+      strokePauseCandidate = null;
+      confirmHoldCandidate = null;
+    }
+
+    function trackStrokeVertexPoint(x, y) {
+      const now = Date.now();
+
+      // 頂点検出用（厳しめの許容量）
+      if (!strokePauseCandidate) {
+        strokePauseCandidate = { x, y, startTime: now };
+      } else {
+        const dist = Math.hypot(x - strokePauseCandidate.x, y - strokePauseCandidate.y);
+        if (dist > VERTEX_MOVE_TOLERANCE) {
+          if (now - strokePauseCandidate.startTime >= VERTEX_PAUSE_MS) {
+            currentStrokeVertices.push({ x: strokePauseCandidate.x, y: strokePauseCandidate.y });
+          }
+          strokePauseCandidate = { x, y, startTime: now };
+        }
+      }
+
+      // 図形化確定用（緩めの許容量。人の手の自然な震えを許容する）
+      if (!confirmHoldCandidate) {
+        confirmHoldCandidate = { x, y, startTime: now };
+      } else {
+        const dist2 = Math.hypot(x - confirmHoldCandidate.x, y - confirmHoldCandidate.y);
+        if (dist2 > SHAPE_CONFIRM_MOVE_TOLERANCE) {
+          confirmHoldCandidate = { x, y, startTime: now };
+        }
+      }
+    }
+
+    function finalizeStrokeVertexTracking() {
+      if (strokePauseCandidate && (Date.now() - strokePauseCandidate.startTime) >= VERTEX_PAUSE_MS) {
+        currentStrokeVertices.push({ x: strokePauseCandidate.x, y: strokePauseCandidate.y });
+      }
+    }
+
+    // 図形化確定のための保持中、人の手の震えによって「その場に留まったまま
+    // 何度も4pxを超えて動く」ことがあり、頂点検出（厳しめの許容量）側が
+    // 同じ場所付近で複数の疑似頂点を誤って記録してしまうことがある。
+    // 近接する頂点候補を1つにまとめることで、円がこのノイズによって
+    // 多角形と誤判定されるのを防ぐ。
+    function dedupNearbyVertices(verts, minDist) {
+      const result = [];
+      for (const v of verts) {
+        const last = result[result.length - 1];
+        if (!last || Math.hypot(v.x - last.x, v.y - last.y) > minDist) {
+          result.push(v);
+        }
+      }
+      return result;
+    }
+
+    canvas.on('mouse:down', function() {
+      if (canvas.isDrawingMode && currentDrawMode === 'pen') {
+        resetStrokeVertexTracking();
+        isTrackingStroke = true;
+      } else {
+        isTrackingStroke = false;
+      }
+    });
+    canvas.on('mouse:move', function(opt) {
+      if (!isTrackingStroke) return;
+      const p = canvas.getPointer(opt.e);
+      trackStrokeVertexPoint(p.x, p.y);
+    });
+    canvas.on('mouse:up', function() {
+      if (isTrackingStroke) {
+        isTrackingStroke = false;
+      }
+    });
+
+    const SHAPE_CONFIRM_HOLD_MS = 550; // 図形化の確定とみなす保持時間（約0.55秒。1秒は長すぎるとの声を受けて短縮）
+
     canvas.on('path:created', (e) => {
       if (e.path.width <= 2 && e.path.height <= 2) { canvas.remove(e.path); canvas.renderAll(); return; }
       lastHandwritingBounds = { left: e.path.left, top: e.path.top + e.path.height + 15 };
+
+      // 図形化は「ストロークの終点でおよそ0.55秒ペンを保持していたか」だけを条件にする。
+      // path:created は mouse:up より先に発火するため、まだ確定前の
+      // confirmHoldCandidate（緩めの許容量で人の手ブレを吸収するトラッカー）を
+      // 直接見て、リフトの瞬間に判定できる。
+      //   ・保持していなければ（＝すぐにペンを離せば）図形化を一切試みない
+      //     → ひらがとなど手書き文字を書く際の通常のストローク間の間隔を
+      //       誤って図形化のサインと解釈しなくなる
+      //   ・保持していれば、リフトした瞬間に追加の待ち時間なく即座に図形化する
+      //     → 「離してから図形化されるまでのラグ」を感じさせない
+      const heldAtEnd = !!confirmHoldCandidate &&
+        (Date.now() - confirmHoldCandidate.startTime) >= SHAPE_CONFIRM_HOLD_MS;
+
+      finalizeStrokeVertexTracking(); // 頂点候補としても確定させる(通常の0.15秒しきい値)
+
+      if (currentDrawMode === 'pen' && heldAtEnd) {
+        const capturedVertices = dedupNearbyVertices(currentStrokeVertices, SHAPE_CONFIRM_MOVE_TOLERANCE);
+        convertPathToShapeIfRecognized(e.path, capturedVertices);
+      }
+
       saveState();
     });
 
@@ -1655,7 +2201,8 @@
 
       const text = new fabric.IText('', {
         left: posX, top: posY, fontSize: parseInt(fontSizeInput.value, 10) || 22,
-        fill: textColorInput.value, fontFamily: fontSelect.value
+        fill: textColorInput.value, fontFamily: fontSelect.value,
+        editingBorderColor: '#0d3b8c' // 編集中の点線枠の視認性を高めるため濃い色にする
       });
 
       canvas.add(text);
@@ -1674,7 +2221,8 @@
     function createNewTextBox(x, y) {
       const text = new fabric.IText('', {
         left: x, top: y, fontSize: parseInt(fontSizeInput.value, 10) || 22,
-        fill: textColorInput.value, fontFamily: fontSelect.value
+        fill: textColorInput.value, fontFamily: fontSelect.value,
+        editingBorderColor: '#0d3b8c' // 編集中の点線枠の視認性を高めるため濃い色にする
       });
       canvas.add(text);
       canvas.setActiveObject(text);
@@ -1694,6 +2242,11 @@
       const originMark = canvas.getObjects().find(o => o.isOriginMark);
       if (originMark) originMark.visible = false;
 
+      // 出力（PNG/PDF）にはマス目模様を映したくないため、一時的に無地の背景色へ
+      // 差し替えてから書き出し、終わったら元のマス目パターンに戻す。
+      const originalBackground = canvas.backgroundColor;
+      canvas.backgroundColor = bgStyleSelect.value;
+
       canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
       canvas.renderAll();
 
@@ -1702,6 +2255,7 @@
       if (objects.length === 0) {
         canvas.setViewportTransform(currentVpt);
         if (originMark) originMark.visible = true;
+        canvas.backgroundColor = originalBackground;
         canvas.renderAll();
         return null;
       }
@@ -1737,6 +2291,7 @@
 
       canvas.setViewportTransform(currentVpt);
       if (originMark) originMark.visible = true;
+      canvas.backgroundColor = originalBackground;
       canvas.renderAll();
 
       return { dataURL, width: exportWidth, height: exportHeight };
@@ -1802,11 +2357,26 @@
     });
 
     document.getElementById('clear-btn').addEventListener('click', () => {
-      if (confirm('現在のページの描画内容を消去しますか？')) {
+      if (confirm('現在のページの描画内容を消去しますか？（他のページには影響しません）')) {
         canvas.clear();
         updateCanvasBackground(bgStyleSelect.value);
+        history = [];
+        historyStep = -1;
         saveState();
       }
+    });
+
+    document.getElementById('clear-all-btn').addEventListener('click', () => {
+      if (!confirm('すべてのページの描画内容を消去します。この操作は元に戻せません。本当によろしいですか？')) return;
+      if (!confirm('最終確認：本当にすべてのページを消去しますか？')) return;
+      pagesData = [null];
+      currentPageIndex = 0;
+      history = [];
+      historyStep = -1;
+      canvas.clear();
+      updateCanvasBackground(bgStyleSelect.value);
+      updatePageUI();
+      saveState();
     });
 
     window.addEventListener('resize', () => {
@@ -1820,7 +2390,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.118     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.123     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
