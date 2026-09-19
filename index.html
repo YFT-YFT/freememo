@@ -256,6 +256,78 @@
       max-width: 150px;
     }
 
+    #connector-type-select { max-width: 110px; }
+
+    /* --- 色選択（主要8色パレット＋詳細ピッカー） --- */
+    .color-picker-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .color-swatch-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: none;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+    }
+    /* 標準の<input type="color">自体は画面には出さず、詳細ピッカーの
+       呼び出し口としてのみ使う。display:noneにすると一部ブラウザで
+       .click()による起動ができなくなるため、サイズを1pxにして
+       透明化する方式で対応する。 */
+    .native-color-input-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      border: none;
+      padding: 0;
+      pointer-events: none;
+    }
+    .color-popup {
+      display: none;
+      position: absolute;
+      top: 32px;
+      left: 0;
+      z-index: 50;
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+      padding: 8px;
+      width: 128px;
+    }
+    .color-popup.open { display: block; }
+    .color-preset-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .color-preset-swatch {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid #eee;
+      cursor: pointer;
+      padding: 0;
+    }
+    .color-preset-swatch:active { transform: scale(0.9); }
+    .color-more-btn {
+      width: 100%;
+      font-size: 12px;
+      padding: 6px 4px;
+      border-radius: 6px;
+      border: 1px solid #dee2e6;
+      background: #f8f9fa;
+      cursor: pointer;
+      color: #333;
+    }
+
     .status-badge {
       font-size: 11px;
       color: #666;
@@ -417,14 +489,24 @@
         <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️</button>
         <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（なぞった部分の要素を消します）">🧹</button>
         <button id="select-mode-btn" class="toggle-btn" title="選択モード（ONの間、1回のタップ/クリックでオブジェクトを選択・移動できます）">👆 選択</button>
-        <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップすると線で接続します。接続された要素は動かしても線が繋がったままになります）">🔗 コネクタ</button>
+        <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップすると線で接続します。接続された要素は動かしても線が繋がったままになります。もう一度押すとオフになります）">🔗 コネクタ</button>
+        <select id="connector-type-select" title="コネクタの線種">
+          <option value="none">― 実線</option>
+          <option value="end">→ 片側矢印</option>
+          <option value="both">↔ 両側矢印</option>
+        </select>
       </div>
 
       <!-- 2. ペン設定（直前の描画ツールに直結する設定） -->
       <div class="tool-group">
-        <div class="tool-item" title="ペンの色">
+        <div class="tool-item color-picker-wrap" title="ペンの色">
           <span>色:</span>
-          <input type="color" id="pen-color" value="#222222">
+          <button type="button" class="color-swatch-btn" id="pen-color-swatch" aria-label="ペンの色を選ぶ" style="background:#222222;"></button>
+          <input type="color" id="pen-color" class="native-color-input-hidden" value="#222222">
+          <div class="color-popup" id="pen-color-popup">
+            <div class="color-preset-grid" data-target="pen-color"></div>
+            <button type="button" class="color-more-btn" data-target="pen-color">🎨 もっと見る…</button>
+          </div>
         </div>
         <div class="tool-item" title="ペンの太さ">
           <span>太さ:</span>
@@ -478,8 +560,13 @@
           <input type="number" id="font-size-input" value="22" min="8" max="200" step="1">
           <span>px</span>
         </div>
-        <div class="tool-item" title="文字色">
-          <input type="color" id="text-color" value="#222222">
+        <div class="tool-item color-picker-wrap" title="文字色">
+          <button type="button" class="color-swatch-btn" id="text-color-swatch" aria-label="文字色を選ぶ" style="background:#222222;"></button>
+          <input type="color" id="text-color" class="native-color-input-hidden" value="#222222">
+          <div class="color-popup" id="text-color-popup">
+            <div class="color-preset-grid" data-target="text-color"></div>
+            <button type="button" class="color-more-btn" data-target="text-color">🎨 もっと見る…</button>
+          </div>
         </div>
       </div>
 
@@ -548,6 +635,7 @@
           <li><b>手書き（ペン・マーカー）</b>: 画面上をドラッグ（指やペンでなぞる）すると、いつでも自由に手書きができます。上部メニューで線の「色」や「太さ」を自由に調整できます。</li>
           <li><b>図形として自動整形</b>: 標準ペンで直線・円・四角形・三角形・五角形などに近い形を描き、描き終わりの位置でペンを画面につけたまま約1秒保持してから離すと、自動できれいな図形に変換されます（判定に自信が持てない場合は手書きのまま残ります）。保持せずすぐ離した場合は図形化を試みないため、ひらがとなど手書き文字が誤って図形化されにくくなっています。多角形にしたい場合は、角にしたい場所で0.1〜0.2秒ほど止まりながら描くと認識しやすくなります。閉じきっていなくても「閉じようとしている」形であれば認識されます。</li>
           <li><b>キーボードで文字入力</b>: 画面上の入力したい場所を<b>ダブルクリック（またはダブルタップ）</b>すると、その場所に文字を入力できます。フォントやサイズ、文字色の変更も可能です。</li>
+          <li><b>🎨 色選び</b>: 「色」の丸いボタンを押すと、よく使う8色をワンタップで選べるパレットが開きます（選ぶと即座に閉じます）。パレットにない色が欲しいときは「🎨 もっと見る…」から、これまで通りの詳細なカラーピッカーを開けます。</li>
         </ul>
       </div>
 
@@ -559,6 +647,9 @@
           <li><b>長押し（約0.7秒）</b>: キーボードがない端末でも、選択したい対象を指で押さえたまま少し待つと選択できます（対応端末では振動でお知らせします）。指を離した後、改めてドラッグすると移動できます。</li>
           <li><b>Ctrl（Macは⌘）+ クリック/ドラッグ</b>: パソコンで、押している間だけ選択モードとして扱われます。</li>
           <li><b>削除</b>: 選択した状態で「🗑️」ボタン、またはキーボードの Delete / Backspace で削除できます。</li>
+          <li><b>🔗 コネクタ</b>: メニューの「🔗 コネクタ」を押すとON、もう一度押すとOFF（ペンモードに戻ります）。線でつなぎたい2つの要素（手書き・文字・画像・図形）を順にタップすると、それぞれの図形の縁まで伸びる線が引かれます（図形の内側を突き抜けないよう、中心ではなく輪郭に接続されます）。1つ目をタップするとオレンジ色になり選択中を示します。同じ要素をもう一度タップ、何もない場所をタップ、またはEscキーで選択を取り消せます。つないだあとに要素を動かすと、線も自動的に追従します。要素を削除すると、それにつながっていた線も一緒に消えます。</li>
+          <li><b>🔗 コネクタの線種と色</b>: コネクタボタンの隣のメニューで「実線」「片側矢印」「両側矢印」を切り替えられます（選んでから接続すると、その見た目で線が引かれます。作成後の線種の変更はできません）。線の色は、その時点で「✏️ 色」に設定されている色が使われます。</li>
+          <li><b>🔗 コネクタ－注意点</b>: 手書きの線などナナメに傾いた図形の場合、接続点は図形を囲む長方形（バウンディングボックス）の縁を基準に計算されるため、見た目の輪郭と数ピクセルずれることがあります。</li>
         </ul>
       </div>
 
@@ -613,6 +704,11 @@
     // 1回のタップ/クリックだけでオブジェクトの選択・移動ができるようにする。
     // スマホ・タブレット等キーボードのない端末でも確実に選択できるようにするための機能。
     let isSelectMode = false;
+    // コネクタモードで「1つ目にタップした要素」を一時的に保持する。
+    // これが宣言されていなかったため、コネクタモードを抜ける際の処理
+    // （if (mode !== 'connector' && pendingConnectorSource)）が
+    // ReferenceError で例外を起こし、モード切り替え自体が壊れていた。
+    let pendingConnectorSource = null;
 
     const canvas = new fabric.Canvas('c', {
       width: window.innerWidth,
@@ -792,7 +888,13 @@
         const b = parseInt(hex.substr(4, 2), 16) || 0;
         canvas.freeDrawingBrush.color = `rgba(${r}, ${g}, ${b}, 0.35)`;
         canvas.freeDrawingBrush.width = Math.max(12, width * 3);
-      } else if (currentDrawMode === 'eraser') {
+      } else {
+        // eraser / connector など、フリードローを行わないモードは
+        // 明示的に isDrawingMode を false にする。
+        // 以前は eraser のみ個別に false へ倒しており、connector には
+        // 何の分岐も無かったため、直前が pen/highlighter モードのまま
+        // connector に切り替えると isDrawingMode=true が残ってしまい、
+        // タップしたつもりが手書き線になってしまう不具合があった。
         canvas.isDrawingMode = false;
       }
     }
@@ -978,6 +1080,237 @@
     upperCanvasEl.addEventListener('mouseup', cancelLongPress, { capture: true });
     window.addEventListener('blur', cancelLongPress);
 
+    // --- fabric.Line に矢印（矢じり）描画を追加する ---
+    // isConnectorLine な fabric.Line インスタンスに限り、arrowType
+    // ('none' | 'end' | 'both' | 'start') に応じて端点へ矢じりを描き足す。
+    // 図形挿入の「直線」など、isConnectorLine を持たない通常の
+    // fabric.Line には一切影響しない。
+    // クラスを新設せず既存のfabric.Lineのプロトタイプをそのまま拡張して
+    // いるのは、コネクタ線を保存/復元(toJSON・loadFromJSON)した際に
+    // 標準のfabric.Line.fromObjectでそのまま正しく復元でき、矢印の
+    // 描画ロジックが失われないようにするため（独自クラスを別途登録すると、
+    // 復元時のクラス解決やtoObjectの扱いが複雑になり不具合の元になる）。
+    (function() {
+      const originalLineRender = fabric.Line.prototype._render;
+      fabric.Line.prototype._render = function(ctx) {
+        originalLineRender.call(this, ctx);
+        if (!this.isConnectorLine || !this.arrowType || this.arrowType === 'none') return;
+
+        const p = this.calcLinePoints();
+        const dx = p.x2 - p.x1, dy = p.y2 - p.y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len, uy = dy / len;
+        const size = Math.max(10, (this.strokeWidth || 2) * 4.5);
+        const spread = Math.PI / 7.5;
+
+        const drawHead = (tipX, tipY, dirX, dirY) => {
+          const angle = Math.atan2(dirY, dirX);
+          const leftX = tipX - size * Math.cos(angle - spread);
+          const leftY = tipY - size * Math.sin(angle - spread);
+          const rightX = tipX - size * Math.cos(angle + spread);
+          const rightY = tipY - size * Math.sin(angle + spread);
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(tipX, tipY);
+          ctx.lineTo(leftX, leftY);
+          ctx.lineTo(rightX, rightY);
+          ctx.closePath();
+          ctx.fillStyle = this.stroke || '#555555';
+          ctx.fill();
+          ctx.restore();
+        };
+
+        // p.x2,p.y2 は接続先（後からタップした要素）側の端点
+        if (this.arrowType === 'end' || this.arrowType === 'both') {
+          drawHead(p.x2, p.y2, ux, uy);
+        }
+        // p.x1,p.y1 は接続元（先にタップした要素）側の端点
+        if (this.arrowType === 'start' || this.arrowType === 'both') {
+          drawHead(p.x1, p.y1, -ux, -uy);
+        }
+      };
+    })();
+
+    // ============================================================
+    // 🔗 コネクタ機能
+    // 「コネクタ」モード中に要素を2つ順にタップすると、線（接続線）で結ぶ。
+    // 線は中心同士ではなく、それぞれの図形の境界（バウンディングボックスの縁）
+    // まで伸びるようにする。中心同士を結ぶと図形の内側を線が突き抜けて
+    // 見た目が悪く、「図形そのものに繋がっている」ようには見えないため。
+    // 接続線は、両端の要素のどちらかを動かす／リサイズする／削除するのに
+    // 追従して自動更新される。
+    // 要素同士の対応関係は、要素ごとに割り振る一意のID（connId）と、
+    // 接続線側が持つ connFromId / connToId の組み合わせで管理する
+    // （オブジェクト参照を直接持たせると、ページ切り替えや保存/復元の
+    //   JSONシリアライズができないため）。
+    // ============================================================
+
+    function restoreConnectorSourceStyle(obj) {
+      if (!obj) return;
+      obj.set({ stroke: (obj._connOrigStroke !== undefined ? obj._connOrigStroke : null) });
+      delete obj._connOrigStroke;
+    }
+
+    function cancelPendingConnectorSelection() {
+      if (!pendingConnectorSource) return;
+      restoreConnectorSourceStyle(pendingConnectorSource);
+      pendingConnectorSource = null;
+      canvas.renderAll();
+    }
+
+    function ensureConnId(obj) {
+      if (!obj.connId) {
+        obj.connId = 'conn_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+      }
+      return obj.connId;
+    }
+
+    function findObjectByConnId(id) {
+      if (!id) return null;
+      return canvas.getObjects().find(o => !o.isConnectorLine && o.connId === id) || null;
+    }
+
+    // アクティブ選択（複数選択グループ）の中に入っている最中の要素は、
+    // left/top がグループ基準の相対座標になるため、そのままでは
+    // キャンバス上の絶対座標にならない。グループの変形行列を掛けて
+    // 絶対座標へ変換する。
+    function getConnectorAnchorPoint(obj) {
+      const center = obj.getCenterPoint();
+      if (obj.group) {
+        return fabric.util.transformPoint(center, obj.group.calcTransformMatrix());
+      }
+      return center;
+    }
+
+    // 矩形(rect: left/top/width/height、いずれもキャンバス絶対座標)の中心から
+    // toward方向へ伸ばした直線が、矩形の外周と交わる点を求める。
+    // 「図形の中心」ではなく「図形の縁」に接続線をつなげるための計算。
+    function getRectEdgePoint(rect, center, toward) {
+      const dx = toward.x - center.x;
+      const dy = toward.y - center.y;
+      if (dx === 0 && dy === 0) return { x: center.x, y: center.y };
+
+      const halfW = Math.max(rect.width / 2, 0.01);
+      const halfH = Math.max(rect.height / 2, 0.01);
+      const scaleX = dx !== 0 ? halfW / Math.abs(dx) : Infinity;
+      const scaleY = dy !== 0 ? halfH / Math.abs(dy) : Infinity;
+      // 図形同士が重なっていて相手の中心が自分の内側にある場合、
+      // 縁より先（相手の中心を通り越す位置）に出てしまわないよう
+      // scaleの上限を1（＝相手の中心そのもの）に制限する。
+      const scale = Math.min(scaleX, scaleY, 1);
+
+      return { x: center.x + dx * scale, y: center.y + dy * scale };
+    }
+
+    // 接続線1本の始点・終点を、現在の2つの要素の位置関係から再計算する。
+    function refreshConnectorLine(line) {
+      const objA = findObjectByConnId(line.connFromId);
+      const objB = findObjectByConnId(line.connToId);
+      if (!objA || !objB) return; // 対応する要素が見つからない（削除済み等）場合は何もしない
+
+      const centerA = getConnectorAnchorPoint(objA);
+      const centerB = getConnectorAnchorPoint(objB);
+      const rectA = objA.getBoundingRect(true, true); // キャンバス絶対座標での境界
+      const rectB = objB.getBoundingRect(true, true);
+
+      const pA = getRectEdgePoint(rectA, centerA, centerB);
+      const pB = getRectEdgePoint(rectB, centerB, centerA);
+
+      line.set({ x1: pA.x, y1: pA.y, x2: pB.x, y2: pB.y });
+      line.setCoords();
+    }
+
+    function refreshAllConnectorLines() {
+      canvas.getObjects().forEach(o => { if (o.isConnectorLine) refreshConnectorLine(o); });
+      canvas.renderAll();
+    }
+
+    function createConnectorLine(objA, objB) {
+      ensureConnId(objA);
+      ensureConnId(objB);
+
+      // 線種（実線／片側矢印／両側矢印）と色は、その時点でツールバーの
+      // 「🔗 コネクタ」隣の選択と「ペンの色」に設定されているものを使う
+      // （図形挿入時の色の扱いと合わせ、ペンの色をそのまま流用する）。
+      const arrowType = connectorTypeSelect ? connectorTypeSelect.value : 'none';
+      const color = penColorInput.value;
+
+      const line = new fabric.Line([0, 0, 0, 0], {
+        stroke: color,
+        strokeWidth: 2,
+        strokeDashArray: [6, 4],
+        selectable: true,
+        evented: true,
+        hasControls: false, // 端点を個別にドラッグされると接続元/先とズレて同期が崩れるため無効化
+        lockMovementX: true, // 線自体の平行移動も不可にする（あくまで両端の要素に追従させる）
+        lockMovementY: true,
+        hoverCursor: 'pointer',
+        isConnectorLine: true,
+        arrowType: arrowType,
+        connFromId: objA.connId,
+        connToId: objB.connId
+      });
+
+      canvas.add(line);
+      refreshConnectorLine(line); // 中心ではなく、それぞれの図形の縁の位置に座標を合わせる
+
+      // 通常のオブジェクトより背面に、ただし中心の原点マークよりは
+      // 前面になるよう並び順を調整する（他の要素のクリック判定を
+      // 邪魔しないようにするため）。
+      const originMark = canvas.getObjects().find(o => o.isOriginMark);
+      if (originMark) {
+        canvas.moveTo(line, canvas.getObjects().indexOf(originMark) + 1);
+      } else {
+        canvas.sendToBack(line);
+      }
+      canvas.renderAll();
+      saveState();
+    }
+
+    // 指定した要素（objがアクティブ選択グループの場合は中身の各要素）に
+    // つながっている接続線を、現在位置に合わせて再計算する。
+    // 片方の要素だけが動いた場合でも、線の両端（縁の接続位置）は
+    // 2つの要素の相対位置から決まるため、必ず refreshConnectorLine で
+    // 両端まとめて再計算する（動いていない側の端点も、方向が変われば
+    // 縁上の位置がずれるため）。
+    function updateConnectorLinesFor(obj) {
+      if (!obj) return;
+      if (obj._objects) {
+        // 複数選択でまとめて移動/変形している場合は、中の要素ごとに処理する
+        obj._objects.forEach(child => updateConnectorLinesFor(child));
+        return;
+      }
+      if (!obj.connId) return;
+      canvas.getObjects().forEach(o => {
+        if (!o.isConnectorLine) return;
+        if (o.connFromId === obj.connId || o.connToId === obj.connId) {
+          refreshConnectorLine(o);
+        }
+      });
+    }
+
+    function handleConnectorTransformUpdate(opt) {
+      if (!opt.target) return;
+      updateConnectorLinesFor(opt.target);
+      canvas.requestRenderAll();
+    }
+    canvas.on('object:moving', handleConnectorTransformUpdate);
+    canvas.on('object:scaling', handleConnectorTransformUpdate);
+    canvas.on('object:rotating', handleConnectorTransformUpdate);
+
+    // 要素が削除されたら、それにつながっていた接続線も一緒に削除する
+    // （宙に浮いた接続線が残ってしまうのを防ぐ）。ここを削除処理の
+    // 一箇所に集約することで、消しゴム／選択削除／複数削除など
+    // どの削除経路からでも漏れなく後始末できる。
+    canvas.on('object:removed', function(opt) {
+      const obj = opt.target;
+      if (!obj || obj.isConnectorLine || !obj.connId) return;
+      const linesToRemove = canvas.getObjects().filter(o =>
+        o.isConnectorLine && (o.connFromId === obj.connId || o.connToId === obj.connId)
+      );
+      linesToRemove.forEach(l => canvas.remove(l));
+    });
+
     canvas.on('mouse:down', function(opt) {
       const evt = opt.e;
       const target = opt.target;
@@ -1052,6 +1385,43 @@
         return;
       }
 
+      if (currentDrawMode === 'connector') {
+        // 接続線自体をタップしても何もしない（選択して動かす操作は許可しない）
+        if (target && target.isConnectorLine) return;
+
+        // 何もない場所／原点マーク／固定中の要素をタップした場合は、
+        // 選択待ちだった1つ目の要素があればキャンセルするだけにする
+        if (!target || target.isOriginMark || target.isLocked) {
+          cancelPendingConnectorSelection();
+          return;
+        }
+
+        // ドラッグでの移動が始まらないよう、Fabric標準の選択状態は使わない
+        canvas.discardActiveObject();
+
+        if (!pendingConnectorSource) {
+          // 1つ目の要素：見た目をオレンジ色にして選択中であることを示す
+          pendingConnectorSource = target;
+          target._connOrigStroke = target.stroke;
+          target.set({ stroke: '#ff5500' });
+          canvas.renderAll();
+          return;
+        }
+
+        if (pendingConnectorSource === target) {
+          // 同じ要素をもう一度タップしたら選択解除
+          cancelPendingConnectorSelection();
+          return;
+        }
+
+        // 2つ目の要素：1つ目との間に接続線を作成する
+        createConnectorLine(pendingConnectorSource, target);
+        restoreConnectorSourceStyle(pendingConnectorSource);
+        pendingConnectorSource = null;
+        canvas.renderAll();
+        return;
+      }
+
       if (isCtrlPressed) {
         // Ctrl（Mac は Cmd）は最優先で「選択」の意図として扱う。
         // macOSでは Ctrl+クリック がOSレベルで「右クリック」として解釈され
@@ -1082,6 +1452,7 @@
         if (target.type === 'i-text') {
           target.enterEditing();
           textColorInput.value = target.fill || '#222222';
+          textColorInput.updateSwatch && textColorInput.updateSwatch();
         }
         canvas.renderAll();
         updateDeleteButtonState();
@@ -1210,6 +1581,7 @@
       const activeObject = e.selected ? e.selected[0] : canvas.getActiveObject();
       if (activeObject && activeObject.type === 'i-text') {
         textColorInput.value = activeObject.fill || '#222222';
+        textColorInput.updateSwatch && textColorInput.updateSwatch();
         fontSizeInput.value = activeObject.fontSize || 22;
       }
       updateDeleteButtonState();
@@ -1229,6 +1601,7 @@
     const eraserModeBtn = document.getElementById('eraser-mode-btn');
     const selectModeBtn = document.getElementById('select-mode-btn');
     const connectorBtn = document.getElementById('connector-btn');
+    const connectorTypeSelect = document.getElementById('connector-type-select');
     const touchPanLockBtn = document.getElementById('touch-pan-lock-btn');
 
     function setDrawMode(mode) {
@@ -1244,9 +1617,7 @@
       }
       // コネクタモードから離れる場合、選択待ちだった1つ目の要素の見た目を元に戻す
       if (mode !== 'connector' && pendingConnectorSource) {
-        pendingConnectorSource.set({ stroke: pendingConnectorSource._connOrigStroke });
-        canvas.renderAll();
-        pendingConnectorSource = null;
+        cancelPendingConnectorSelection();
       }
       applyBrushSettings();
       updateSelectModeIndicator();
@@ -1255,7 +1626,13 @@
     penModeBtn.addEventListener('click', () => setDrawMode('pen'));
     highlighterModeBtn.addEventListener('click', () => setDrawMode('highlighter'));
     eraserModeBtn.addEventListener('click', () => setDrawMode('eraser'));
-    connectorBtn.addEventListener('click', () => setDrawMode('connector'));
+    connectorBtn.addEventListener('click', () => {
+      // コネクタモード中にもう一度押した場合は解除（ペンモードへ戻す）。
+      // 以前は常に setDrawMode('connector') を呼ぶだけだったため、
+      // ONの状態でボタンを押しても何も変わらず「解除されない」ように
+      // 見える不具合があった。
+      setDrawMode(currentDrawMode === 'connector' ? 'pen' : 'connector');
+    });
 
     // --- 選択モード（トグルボタン） ---
     // ONの間は常に isDrawingMode=false になり、1回のタップ/クリックで
@@ -1376,7 +1753,10 @@
       if (isHistoryProcessing) return;
       if (historyStep < history.length - 1) history = history.slice(0, historyStep + 1);
 
-      const json = JSON.stringify(canvas.toJSON(['isOriginMark', 'isLocked', '_preLockOpacity', 'selectable']));
+      const json = JSON.stringify(canvas.toJSON([
+        'isOriginMark', 'isLocked', '_preLockOpacity', 'selectable',
+        'connId', 'isConnectorLine', 'connFromId', 'connToId', 'arrowType'
+      ]));
       history.push(json);
       if (history.length > MAX_HISTORY) history.shift(); // 上限を超えたら古い履歴から破棄
       historyStep = history.length - 1;
@@ -1393,11 +1773,17 @@
 
     function undo() {
       if (historyStep > 0) {
+        // loadFromJSONでキャンバスの中身が丸ごと新しいオブジェクトに
+        // 差し替わるため、コネクタの選択待ち状態（古いオブジェクトへの
+        // 参照）が残っていると不整合になる。スタイルを戻す処理は不要
+        // （対象オブジェクト自体がこの後消える）なので単純にクリアする。
+        pendingConnectorSource = null;
         isHistoryProcessing = true;
         historyStep--;
         canvas.loadFromJSON(history[historyStep], () => {
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
+          refreshAllConnectorLines(); // 旧バージョンの中心接続の線も、図形の縁基準の位置に補正する
           canvas.renderAll();
           updateHistoryButtons();
           pagesData[currentPageIndex] = history[historyStep];
@@ -1409,11 +1795,13 @@
 
     function redo() {
       if (historyStep < history.length - 1) {
+        pendingConnectorSource = null;
         isHistoryProcessing = true;
         historyStep++;
         canvas.loadFromJSON(history[historyStep], () => {
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
+          refreshAllConnectorLines();
           canvas.renderAll();
           updateHistoryButtons();
           pagesData[currentPageIndex] = history[historyStep];
@@ -1433,6 +1821,7 @@
 
     function switchPage(newIndex) {
       if (newIndex < 0 || newIndex >= pagesData.length) return;
+      pendingConnectorSource = null;
       currentPageIndex = newIndex;
       updatePageUI();
 
@@ -1441,6 +1830,7 @@
         canvas.loadFromJSON(pageJson, () => {
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
+          refreshAllConnectorLines();
           canvas.renderAll();
           history = [pageJson];
           historyStep = 0;
@@ -1490,6 +1880,78 @@
     const deleteSelectedBtn = document.getElementById('delete-selected-btn');
     const imgFileInput = document.getElementById('img-file-input');
 
+    // ============================================================
+    // 🎨 色選択（主要8色パレット＋詳細ピッカー）
+    // 標準の<input type="color">だけだと毎回OSの詳細なカラーピッカーを
+    // 開く必要があり手間なので、よく使う8色をワンタップで選べるパレットを
+    // 追加する。それでも欲しい色が無い場合は「🎨 もっと見る…」から
+    // 従来通りの詳細ピッカー（ブラウザ標準の<input type="color">）を呼び出せる。
+    // ============================================================
+    const COLOR_PRESETS = ['#000000', '#ffffff', '#e03131', '#f08c00', '#2f9e44', '#1971c2', '#7048e8', '#495057'];
+
+    function setupColorPicker(nativeInput, swatchBtn, popupEl) {
+      const grid = popupEl.querySelector('.color-preset-grid');
+      COLOR_PRESETS.forEach(color => {
+        const sw = document.createElement('button');
+        sw.type = 'button';
+        sw.className = 'color-preset-swatch';
+        sw.style.background = color;
+        sw.dataset.color = color; // style.backgroundの読み戻しはブラウザにより表記が変わる(rgb()化等)ため、
+        sw.setAttribute('aria-label', color); // 値はdata属性に正としてそのまま保持しておく
+        grid.appendChild(sw);
+      });
+
+      function syncSwatch() { swatchBtn.style.background = nativeInput.value; }
+      syncSwatch();
+      // プログラム側で nativeInput.value を直接書き換えた場合（既存要素の
+      // 色を選択状態に反映する処理など）に外部から呼べるよう公開しておく。
+      nativeInput.updateSwatch = syncSwatch;
+
+      function closePopup() { popupEl.classList.remove('open'); }
+      function openPopup() {
+        // 同時に複数のパレットが開いたままにならないよう、他は閉じる
+        document.querySelectorAll('.color-popup.open').forEach(p => { if (p !== popupEl) p.classList.remove('open'); });
+        popupEl.classList.add('open');
+      }
+
+      swatchBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (popupEl.classList.contains('open')) closePopup(); else openPopup();
+      });
+
+      grid.querySelectorAll('.color-preset-swatch').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          nativeInput.value = btn.dataset.color;
+          syncSwatch();
+          // 既存のペン色/文字色反映ロジック（'input'イベント購読）をそのまま使う
+          nativeInput.dispatchEvent(new Event('input', { bubbles: true }));
+          closePopup(); // タップした瞬間にメニューを閉じる
+        });
+      });
+
+      const moreBtn = popupEl.querySelector('.color-more-btn');
+      moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closePopup();
+        nativeInput.click(); // ブラウザ標準の詳細カラーピッカーを開く
+      });
+
+      nativeInput.addEventListener('input', syncSwatch);
+      nativeInput.addEventListener('change', closePopup);
+    }
+
+    setupColorPicker(penColorInput, document.getElementById('pen-color-swatch'), document.getElementById('pen-color-popup'));
+    setupColorPicker(textColorInput, document.getElementById('text-color-swatch'), document.getElementById('text-color-popup'));
+
+    // パレットの外側をタップ/クリックしたら、開いているパレットを閉じる
+    document.addEventListener('pointerdown', (e) => {
+      document.querySelectorAll('.color-popup.open').forEach(p => {
+        const wrap = p.closest('.color-picker-wrap');
+        if (wrap && !wrap.contains(e.target)) p.classList.remove('open');
+      });
+    });
+
     penColorInput.addEventListener('input', () => { applyBrushSettings(); saveState(); });
     penWidthInput.addEventListener('input', (e) => {
       penWidthVal.textContent = `${e.target.value}px`;
@@ -1536,6 +1998,8 @@
         if (penColorInput.value === '#ffffff') penColorInput.value = '#222222';
         if (textColorInput.value === '#ffffff') textColorInput.value = '#222222';
       }
+      penColorInput.updateSwatch && penColorInput.updateSwatch();
+      textColorInput.updateSwatch && textColorInput.updateSwatch();
 
       canvas.getObjects().forEach(obj => {
         if (obj.isOriginMark) return;
@@ -2169,6 +2633,7 @@
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') { if (activeObject) { e.preventDefault(); deleteSelectedObjects(); return; } }
+      if (e.key === 'Escape' && pendingConnectorSource) { e.preventDefault(); cancelPendingConnectorSelection(); return; }
 
       if (e.ctrlKey || e.altKey || e.metaKey) return;
       if (['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
@@ -2358,6 +2823,7 @@
 
     document.getElementById('clear-btn').addEventListener('click', () => {
       if (confirm('現在のページの描画内容を消去しますか？（他のページには影響しません）')) {
+        pendingConnectorSource = null;
         canvas.clear();
         updateCanvasBackground(bgStyleSelect.value);
         history = [];
@@ -2369,6 +2835,7 @@
     document.getElementById('clear-all-btn').addEventListener('click', () => {
       if (!confirm('すべてのページの描画内容を消去します。この操作は元に戻せません。本当によろしいですか？')) return;
       if (!confirm('最終確認：本当にすべてのページを消去しますか？')) return;
+      pendingConnectorSource = null;
       pagesData = [null];
       currentPageIndex = 0;
       history = [];
@@ -2390,7 +2857,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.123     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.125     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
