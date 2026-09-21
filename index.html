@@ -556,7 +556,7 @@
         <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（なぞった部分の要素を消します）">🧹</button>
         <button id="select-mode-btn" class="toggle-btn" title="選択モード（ONの間、1回のタップ/クリックでオブジェクトを選択・移動できます）">👆 選択</button>
         <div class="tool-item" style="position:relative;">
-          <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップすると線で接続します。接続された要素は動かしても線が繋がったままになります。押すとON、もう一度押すとOFFになります）">🔗 コネクタ <span id="connector-type-indicator">―</span></button>
+          <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップ、または1つ目を押したまま2つ目までドラッグして繋ぐと線で接続します。接続された要素は動かしても線が繋がったままになります。押すとON、もう一度押すとOFFになります）">🔗 コネクタ <span id="connector-type-indicator">―</span></button>
           <div class="color-popup connector-type-popup" id="connector-type-popup">
             <div class="connector-type-options">
               <div class="connector-type-group-label">矢印</div>
@@ -720,7 +720,7 @@
           <li><b>長押し（約0.7秒）</b>: キーボードがない端末でも、選択したい対象を指で押さえたまま少し待つと選択できます（対応端末では振動でお知らせします）。指を離した後、改めてドラッグすると移動できます。</li>
           <li><b>Ctrl（Macは⌘）+ クリック/ドラッグ</b>: パソコンで、押している間だけ選択モードとして扱われます。</li>
           <li><b>削除</b>: 選択した状態で「🗑️」ボタン、またはキーボードの Delete / Backspace で削除できます。</li>
-          <li><b>🔗 コネクタ</b>: メニューの「🔗 コネクタ」を押すとON、もう一度押すとOFF（ペンモードに戻ります）。線でつなぎたい2つの要素（手書き・文字・画像・図形）を順にタップすると、それぞれの図形の縁まで伸びる線が引かれます（図形の内側を突き抜けないよう、中心ではなく輪郭に接続されます）。1つ目をタップするとオレンジ色になり選択中を示します。同じ要素をもう一度タップ、何もない場所をタップ、またはEscキーで選択を取り消せます。つないだあとに要素を動かすと、線も自動的に追従します。要素を削除すると、それにつながっていた線も一緒に消えます。</li>
+          <li><b>🔗 コネクタ</b>: メニューの「🔗 コネクタ」を押すとON、もう一度押すとOFF（ペンモードに戻ります）。線でつなぎたい2つの要素（手書き・文字・画像・図形）を、<b>①順にタップ</b>するか、<b>②1つ目を押したまま指/マウスを離さずに2つ目までドラッグ</b>すると、それぞれの図形の縁まで伸びる線が引かれます（図形の内側を突き抜けないよう、中心ではなく輪郭に接続されます）。1つ目に触れるとオレンジ色になり選択中を示し、ドラッグ中は破線のプレビュー線がポインタまで伸び、選んでいる矢印の種類も連動して表示されます。有効な繋ぎ先の上まで来るとその要素もオレンジ色になり、そこで離すと接続されます。同じ要素をもう一度タップ、何もない場所をタップ、またはEscキーで選択を取り消せます。つないだあとに要素を動かすと、線も自動的に追従します。要素を削除すると、それにつながっていた線も一緒に消えます。</li>
           <li><b>🔗 コネクタの見た目と色</b>: 「🔗 コネクタ」ボタンをONにすると選択メニューがその場で開きます。「矢印」（なし／片側／両側）と「線種」（実線／破線、デフォルトは実線）はそれぞれ独立して選べます。選んだ内容はボタン横の記号（例：「→」＝片側矢印の実線、「↔╌」＝両側矢印の破線）で確認できます。メニュー外をタップすると閉じます（作成後の変更はできません）。線の色は、その時点で「✏️ 色」に設定されている色が使われます。</li>
           <li><b>🔗 コネクタ－注意点</b>: 手書きの線などナナメに傾いた図形の場合、接続点は図形を囲む長方形（バウンディングボックス）の縁を基準に計算されるため、見た目の輪郭と数ピクセルずれることがあります。</li>
         </ul>
@@ -748,7 +748,7 @@
         <h4>📁 ファイルの読み込みと出力保存</h4>
         <ul>
           <li><b>読み込み（📁 ファイル）</b>: お手持ちの画像（PNG/JPEG）や<b>PDFファイル</b>を取り込んで、その上に手書きやメモを重ねることができます。複数ページのPDFにも対応しています。</li>
-          <li><b>書き出し（💾 PNG / 📄 PDF）</b>: キャンバスに書いたすべての内容（手書き・文字・画像）を網羅して、1枚の画像（PNG）またはPDFとして保存できます。「用紙」でB5／A4／B4／A3のいずれかを選んだ状態でPDF書き出しすると、「用紙サイズごとにページを分けるか」を確認するダイアログが出ます。分割を選ぶと、実際に描かれているマスだけが、それぞれ実寸サイズのPDFページとして書き出されます。</li>
+          <li><b>書き出し（💾 PNG / 📄 PDF）</b>: キャンバスに書いたすべての内容（手書き・文字・画像）を網羅して、1枚の画像（PNG）またはPDFとして保存できます。「用紙」でB5／A4／B4／A3のいずれかを選んだ状態でPDF書き出しすると、「用紙サイズごとにページを分けるか」を確認するダイアログが出ます。分割を選ぶと、実際に描かれているマスだけが、それぞれ実寸サイズのPDFページとして書き出されます。PDFは印刷品質（300dpi相当）を保ちながらファイルサイズを抑えるため、ページ画像をJPEG圧縮しています（💾 PNGは劣化のない可逆圧縮のままです）。</li>
         </ul>
       </div>
 
@@ -848,6 +848,18 @@
     // （if (mode !== 'connector' && pendingConnectorSource)）が
     // ReferenceError で例外を起こし、モード切り替え自体が壊れていた。
     let pendingConnectorSource = null;
+    // 1つ目の要素を押したまま（マウス:押しっぱなし／タッチ:触れたまま）
+    // 2つ目の要素までドラッグして繋ぐ操作のための状態。
+    // isConnectorDragging: 1つ目の要素を押した瞬間から指/マウスを離すまでの間だけtrueにする
+    //   （そうしないと、タップだけで一旦離した後に単にマウスを動かしただけでも
+    //   ハイライトが反応してしまう）。
+    // connectorHoverTarget: ドラッグ中、現在ポインタの下にある「繋ぎ先候補」の要素。
+    let isConnectorDragging = false;
+    let connectorHoverTarget = null;
+    // ドラッグ中、1つ目の要素からポインタ（または繋ぎ先候補の縁）まで
+    // 伸びる「これから繋がる線」のプレビュー表示。実際の接続が
+    // 完了するまでの間だけ存在する一時的なオブジェクト。
+    let connectorPreviewLine = null;
 
     const canvas = new fabric.Canvas('c', {
       width: window.innerWidth,
@@ -954,10 +966,12 @@
 
     let lastHandwritingBounds = null;
 
-    // 背景の「原点マーク」など、実際の描画内容ではない背景ガイド用オブジェクトかどうかを
-    // 判定する共通ヘルパー。選択・エクスポート・削除などの対象から一律で除外するために使う。
+    // 背景の「原点マーク」や、コネクタのドラッグ中プレビュー線など、
+    // 実際の描画内容ではない一時的・装飾的なオブジェクトかどうかを
+    // 判定する共通ヘルパー。選択・エクスポート・削除などの対象から
+    // 一律で除外するために使う。
     function isGuideObject(obj) {
-      return !!(obj && obj.isOriginMark);
+      return !!(obj && (obj.isOriginMark || obj.isConnectorPreviewLine));
     }
 
     // 背景に敷き詰めるタイル画像を1枚生成する。
@@ -1275,10 +1289,11 @@
     window.addEventListener('blur', cancelLongPress);
 
     // --- fabric.Line に矢印（矢じり）描画を追加する ---
-    // isConnectorLine な fabric.Line インスタンスに限り、arrowType
-    // ('none' | 'end' | 'both' | 'start') に応じて端点へ矢じりを描き足す。
-    // isConnectorLine を持たない通常の fabric.Line（手書き→図形自動認識で
-    // 変換された直線など）には一切影響しない。
+    // isConnectorLine（確定済みの接続線）または isConnectorPreviewLine
+    // （ドラッグ中のプレビュー線）を持つ fabric.Line インスタンスに限り、
+    // arrowType ('none' | 'end' | 'both' | 'start') に応じて端点へ
+    // 矢じりを描き足す。どちらのフラグも持たない通常の fabric.Line
+    // （手書き→図形自動認識で変換された直線など）には一切影響しない。
     // クラスを新設せず既存のfabric.Lineのプロトタイプをそのまま拡張して
     // いるのは、コネクタ線を保存/復元(toJSON・loadFromJSON)した際に
     // 標準のfabric.Line.fromObjectでそのまま正しく復元でき、矢印の
@@ -1288,7 +1303,7 @@
       const originalLineRender = fabric.Line.prototype._render;
       fabric.Line.prototype._render = function(ctx) {
         originalLineRender.call(this, ctx);
-        if (!this.isConnectorLine || !this.arrowType || this.arrowType === 'none') return;
+        if (!(this.isConnectorLine || this.isConnectorPreviewLine) || !this.arrowType || this.arrowType === 'none') return;
 
         const p = this.calcLinePoints();
         const dx = p.x2 - p.x1, dy = p.y2 - p.y1;
@@ -1346,6 +1361,12 @@
     }
 
     function cancelPendingConnectorSelection() {
+      if (connectorHoverTarget && connectorHoverTarget !== pendingConnectorSource) {
+        restoreConnectorSourceStyle(connectorHoverTarget);
+      }
+      connectorHoverTarget = null;
+      isConnectorDragging = false;
+      removeConnectorPreviewLine();
       if (!pendingConnectorSource) return;
       restoreConnectorSourceStyle(pendingConnectorSource);
       pendingConnectorSource = null;
@@ -1417,6 +1438,47 @@
     function refreshAllConnectorLines() {
       canvas.getObjects().forEach(o => { if (o.isConnectorLine) refreshConnectorLine(o); });
       canvas.renderAll();
+    }
+
+    // ドラッグ中、1つ目の要素の縁から toPoint（現在のポインタ位置、または
+    // 繋ぎ先候補の縁）まで伸びる「これから繋がる線」を表示・更新する。
+    // 見た目は常に破線（実際の線種設定とは無関係。ドラッグ中だと
+    // ひと目で分かるように固定している）。矢印の有無は、その時点で
+    // 選択中の矢印タイプ（connectorArrowType）と連動する。
+    function updateConnectorPreviewLine(fromObj, toPoint) {
+      const fromCenter = getConnectorAnchorPoint(fromObj);
+      const fromRect = fromObj.getBoundingRect(true, true);
+      const startPoint = getRectEdgePoint(fromRect, fromCenter, toPoint);
+
+      if (!connectorPreviewLine) {
+        connectorPreviewLine = new fabric.Line([startPoint.x, startPoint.y, toPoint.x, toPoint.y], {
+          stroke: penColorInput.value,
+          strokeWidth: 2,
+          strokeDashArray: [8, 4], // プレビュー中は常に破線にして「まだ確定していない」ことを示す
+          selectable: false,
+          evented: false,
+          isConnectorPreviewLine: true,
+          arrowType: connectorArrowType
+        });
+        canvas.add(connectorPreviewLine);
+      } else {
+        connectorPreviewLine.set({
+          x1: startPoint.x, y1: startPoint.y,
+          x2: toPoint.x, y2: toPoint.y,
+          arrowType: connectorArrowType,
+          stroke: penColorInput.value
+        });
+        canvas.bringToFront(connectorPreviewLine);
+      }
+      connectorPreviewLine.setCoords();
+      canvas.requestRenderAll();
+    }
+
+    function removeConnectorPreviewLine() {
+      if (connectorPreviewLine) {
+        canvas.remove(connectorPreviewLine);
+        connectorPreviewLine = null;
+      }
     }
 
     function createConnectorLine(objA, objB) {
@@ -1520,6 +1582,16 @@
       // （OSに依存しない構造上のバグ）。
       isPanDragging = false;
       isErasingDrag = false; // 前回のドラッグ状態が万一残っていても、新しい操作開始時に必ずリセットする
+      if (isConnectorDragging) {
+        // コネクタのドラッグ中候補ハイライトだけをリセットする（1つ目の選択＝
+        // pendingConnectorSourceは、タップ→タップの流れのために残しておく）
+        if (connectorHoverTarget && connectorHoverTarget !== pendingConnectorSource) {
+          restoreConnectorSourceStyle(connectorHoverTarget);
+        }
+        connectorHoverTarget = null;
+        removeConnectorPreviewLine();
+        isConnectorDragging = false;
+      }
 
       // ロックアイコン以外の場所をクリックした場合は、表示中のロックアイコンを消す
       if (activeLockIcon && target !== activeLockIcon) removeLockIcon();
@@ -1599,6 +1671,8 @@
           pendingConnectorSource = target;
           target._connOrigStroke = target.stroke;
           target.set({ stroke: '#ff5500' });
+          isConnectorDragging = true; // このまま指/マウスを離さずドラッグしてくる操作を検知するため
+          updateConnectorPreviewLine(target, canvas.getPointer(evt));
           canvas.renderAll();
           return;
         }
@@ -1681,6 +1755,43 @@
           updateSelectModeIndicator();
         }
       }
+
+      // コネクタ：1つ目の要素を押したまま2つ目までドラッグしている最中、
+      // 今ポインタの下にある「繋ぎ先候補」をハイライトし、プレビュー線の
+      // 先端をそこまで伸ばす（候補が無ければポインタの位置まで伸ばす）。
+      if (isConnectorDragging && currentDrawMode === 'connector' && pendingConnectorSource) {
+        const hoverCandidate = canvas.findTarget(evt, false);
+        const isValidCandidate = hoverCandidate && hoverCandidate !== pendingConnectorSource &&
+          !isGuideObject(hoverCandidate) && !hoverCandidate.isLocked && !hoverCandidate.isConnectorLine;
+
+        if (isValidCandidate) {
+          if (connectorHoverTarget !== hoverCandidate) {
+            // 別の候補を既にハイライトしていた場合は、まず元の色に戻す
+            if (connectorHoverTarget && connectorHoverTarget !== pendingConnectorSource) {
+              restoreConnectorSourceStyle(connectorHoverTarget);
+            }
+            connectorHoverTarget = hoverCandidate;
+            hoverCandidate._connOrigStroke = hoverCandidate.stroke;
+            hoverCandidate.set({ stroke: '#ff5500' });
+          }
+        } else if (connectorHoverTarget && connectorHoverTarget !== pendingConnectorSource) {
+          // 候補から外れた（何もない場所や無効な要素に移った）のでハイライトを戻す
+          restoreConnectorSourceStyle(connectorHoverTarget);
+          connectorHoverTarget = null;
+        }
+
+        const pointer = canvas.getPointer(evt);
+        let previewToPoint = pointer;
+        if (isValidCandidate) {
+          // 候補がある間は、プレビュー線の先端をその要素の縁（1つ目の要素側を
+          // 向いた点）にスナップさせ、実際に繋がったときの見た目に近づける。
+          const hoverCenter = getConnectorAnchorPoint(hoverCandidate);
+          const hoverRect = hoverCandidate.getBoundingRect(true, true);
+          const fromCenter = getConnectorAnchorPoint(pendingConnectorSource);
+          previewToPoint = getRectEdgePoint(hoverRect, hoverCenter, fromCenter);
+        }
+        updateConnectorPreviewLine(pendingConnectorSource, previewToPoint);
+      }
     });
 
     canvas.on('mouse:up', function() {
@@ -1689,6 +1800,24 @@
       if (isErasingDrag) {
         isErasingDrag = false;
         saveState();
+      }
+
+      // コネクタ：1つ目の要素を押したまま2つ目までドラッグしてきて、
+      // 有効な繋ぎ先候補の上で指/マウスを離した場合はここで接続する。
+      // 候補が無い状態（＝ただのタップだった、または何もない場所で離した）
+      // 場合は、1つ目の選択（pendingConnectorSource）はそのまま残し、
+      // 従来通りの「タップ→タップ」でも繋げられるようにしておく。
+      if (isConnectorDragging) {
+        removeConnectorPreviewLine();
+        if (connectorHoverTarget && pendingConnectorSource && connectorHoverTarget !== pendingConnectorSource) {
+          createConnectorLine(pendingConnectorSource, connectorHoverTarget);
+          restoreConnectorSourceStyle(pendingConnectorSource);
+          restoreConnectorSourceStyle(connectorHoverTarget);
+          pendingConnectorSource = null;
+          connectorHoverTarget = null;
+          canvas.renderAll();
+        }
+        isConnectorDragging = false;
       }
 
       // 保留していた長押しアクションを、Fabric自身の描画終了処理が
@@ -2948,7 +3077,12 @@
       saveState();
     }
 
-    function getExportDataURL() {
+    // format: 'png'（既定・可逆） or 'jpeg'（PDF用。同じ300dpi解像度のまま
+    // ファイルサイズを大きく削減できる）。quality: jpeg時の品質(0-1)。
+    function getExportDataURL(options) {
+      const format = (options && options.format) || 'png';
+      const quality = (options && options.quality) || 1.0;
+
       const activeObj = canvas.getActiveObject();
       if (activeObj && activeObj.isEditing) {
         activeObj.exitEditing();
@@ -2961,7 +3095,8 @@
 
       // 出力（PNG/PDF）には格子模様（細かい方眼・用紙サイズの区切りとも）を
       // 映したくないため、一時的に無地の背景色へ差し替えてから書き出し、
-      // 終わったら元のパターンに戻す。
+      // 終わったら元のパターンに戻す。JPEGは透過を持てないため、
+      // どちらにしても不透明な背景色に揃えておく必要がある。
       const originalBackground = canvas.backgroundColor;
       canvas.backgroundColor = bgStyleSelect.value;
 
@@ -2998,12 +3133,12 @@
       const multiplier = Math.max(2, pixelRatio);
 
       const dataURL = canvas.toDataURL({
-        format: 'png',
+        format: format,
         left: exportLeft,
         top: exportTop,
         width: exportWidth,
         height: exportHeight,
-        quality: 1.0,
+        quality: quality,
         multiplier: multiplier
       });
 
@@ -3030,9 +3165,15 @@
     });
 
     // 従来通り：全体を1ページに収まるよう縮小してPDF化する
+    // PDFに埋め込む画像の品質。JPEGは可逆PNGと違い多少の圧縮ノイズが出るが、
+    // 300dpi（印刷品質）を保ったまま、手書き・文字中心のページでファイル
+    // サイズを大幅に（体感で1/5～1/10程度に）減らせる。0.92は、印刷時の
+    // 見た目の劣化がほぼ分からない範囲でサイズを抑えられる値として選んだ。
+    const PDF_IMAGE_QUALITY = 0.92;
+
     function exportPdfFitToSinglePage() {
       try {
-        const exportData = getExportDataURL();
+        const exportData = getExportDataURL({ format: 'jpeg', quality: PDF_IMAGE_QUALITY });
         if (!exportData) return alert('保存する内容がありません。');
 
         const { jsPDF } = window.jspdf;
@@ -3053,7 +3194,7 @@
         const xPos = (pdfWidth - renderW) / 2;
         const yPos = (pdfHeight - renderH) / 2;
 
-        pdf.addImage(exportData.dataURL, 'PNG', xPos, yPos, renderW, renderH);
+        pdf.addImage(exportData.dataURL, 'JPEG', xPos, yPos, renderW, renderH);
         pdf.save(`memo_${new Date().toISOString().slice(0,10)}.pdf`);
       } catch (err) {
         console.error('PDF書き出しエラー（1ページ収め）:', err);
@@ -3127,17 +3268,17 @@
               if (!hasContent) continue; // 何も描かれていないページは作らない
 
               const dataURL = canvas.toDataURL({
-                format: 'png',
+                format: 'jpeg',
                 left: tileLeft,
                 top: tileTop,
                 width: tileW,
                 height: tileH,
-                quality: 1.0,
+                quality: PDF_IMAGE_QUALITY,
                 multiplier: multiplier
               });
 
               if (pageAdded) pdf.addPage([paperPx.wMM, paperPx.hMM], isLandscape ? 'l' : 'p');
-              pdf.addImage(dataURL, 'PNG', 0, 0, paperPx.wMM, paperPx.hMM);
+              pdf.addImage(dataURL, 'JPEG', 0, 0, paperPx.wMM, paperPx.hMM);
               pageAdded = true;
             }
           }
@@ -3258,7 +3399,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.137     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.140     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
