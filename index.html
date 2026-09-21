@@ -4,12 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ペンテキ (手書きテキスト自在メモ)</title>
+  <!-- 外部ライブラリの読み込みタグには crossorigin="anonymous" を付けている。
+       付けないと、ライブラリ内部で例外が発生した際にブラウザが詳細を
+       伏せて「Script error.」という中身のないエラーだけを報告するため、
+       問題の原因を特定できなくなる（cdnjs.cloudflare.comはCORSヘッダーに
+       対応しているため、これを付けても読み込みに支障はない）。 -->
   <!-- Fabric.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" crossorigin="anonymous"></script>
   <!-- jsPDF (PDF出力用) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
   <!-- PDF.js (PDF読み込み用) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   </script>
@@ -256,8 +261,6 @@
       max-width: 150px;
     }
 
-    #connector-type-select { max-width: 110px; }
-
     /* --- 色選択（主要8色パレット＋詳細ピッカー） --- */
     .color-picker-wrap {
       position: relative;
@@ -289,12 +292,18 @@
       padding: 0;
       pointer-events: none;
     }
+    /* ポップアップ共通（色パレット／コネクタ種類選択で共用）。
+       以前は position:absolute で親（.color-picker-wrap）基準に配置していたが、
+       親がツールバーの横スクロール領域（overflow-x:auto。CSS仕様上これを
+       指定すると overflow-y も暗黙的に auto 扱いになる）の内側にあるため、
+       ポップアップがそのクリッピング範囲でちぎれてしまい、実質タップできない
+       ＝「色選択できない」不具合になっていた。position:fixedにして
+       ビューポート基準の座標をJS側で計算する方式にし、スクロール領域の
+       クリッピングの影響を受けないようにする。 */
     .color-popup {
       display: none;
-      position: absolute;
-      top: 32px;
-      left: 0;
-      z-index: 50;
+      position: fixed;
+      z-index: 500;
       background: #ffffff;
       border-radius: 10px;
       box-shadow: 0 4px 18px rgba(0,0,0,0.25);
@@ -318,6 +327,10 @@
     }
     .color-preset-swatch:active { transform: scale(0.9); }
     .color-more-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
       width: 100%;
       font-size: 12px;
       padding: 6px 4px;
@@ -326,6 +339,50 @@
       background: #f8f9fa;
       cursor: pointer;
       color: #333;
+      user-select: none;
+    }
+    .color-more-btn:active { background: #eceff2; }
+
+    /* --- コネクタの線種選択ポップアップ --- */
+    .connector-type-popup { width: 172px; }
+    .connector-type-options {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .connector-type-group-label {
+      font-size: 11px;
+      color: #888;
+      margin: 4px 0 -2px 2px;
+    }
+    .connector-type-group-label:first-child { margin-top: 0; }
+    .connector-type-row {
+      display: flex;
+      gap: 4px;
+    }
+    .connector-type-option {
+      flex: 1;
+      width: 100%;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 7px 4px;
+      border-radius: 6px;
+      border: 1px solid #dee2e6;
+      background: #f8f9fa;
+      color: #333;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .connector-type-option.selected {
+      background: #e7f1ff;
+      border-color: #007bff;
+      color: #0056b3;
+      font-weight: bold;
+    }
+    #connector-type-indicator {
+      font-size: 12px;
+      opacity: 0.85;
     }
 
     .status-badge {
@@ -355,7 +412,23 @@
       flex-shrink: 0;
       user-select: none;
     }
-    button:hover, .file-label:hover { background: #0056b3; }
+    /* タッチ操作の端末（スマホ・タブレット）では、タップ後もmouseleaveが
+       発生しないため:hoverの見た目（濃い青）が次に別の場所へ触れるまで
+       張り付いたように残ってしまう不具合があった。特にトグルボタン
+       （コネクタボタン等）をタップしてOFFにした直後、実際はOFFなのに
+       :hoverの青だけが残り「まだONのまま」に見えて紛らわしかった。
+       :hoverはマウス等、実際にホバー操作が可能な入力手段の場合だけ
+       効かせるようにして解消する。 */
+    @media (hover: hover) and (pointer: fine) {
+      button:hover, .file-label:hover { background: #0056b3; }
+      .step-btn:hover { background: #dee2e6; }
+      .history-btn:hover { background: #5a6268; }
+      .center-btn:hover { background: #138496; }
+      .fit-btn:hover { background: #1baa80; }
+      .pdf-btn:hover { background: #593196; }
+      button.delete-btn:hover { background: #e8590c; }
+      button.clear-btn:hover { background: #a71d2a; }
+    }
     
     .step-btn {
       width: 24px;
@@ -367,30 +440,23 @@
       font-size: 13px;
       font-weight: bold;
     }
-    .step-btn:hover { background: #dee2e6; }
 
     .toggle-btn { background: #e9ecef; color: #333; border: 1px solid #ccc; }
     .toggle-btn.active { background: #007bff; color: white; border-color: #0056b3; }
 
     .history-btn { background: #6c757d; }
-    .history-btn:hover { background: #5a6268; }
     .history-btn:disabled { background: #ced4da; cursor: not-allowed; opacity: 0.6; }
 
     .center-btn { background: #17a2b8; }
-    .center-btn:hover { background: #138496; }
 
     .fit-btn { background: #20c997; }
-    .fit-btn:hover { background: #1baa80; }
 
     .pdf-btn { background: #6f42c1; }
-    .pdf-btn:hover { background: #593196; }
 
     button.delete-btn { background: #fd7e14; }
-    button.delete-btn:hover { background: #e8590c; }
     button.delete-btn:disabled { background: #ced4da; cursor: not-allowed; opacity: 0.6; }
 
     button.clear-btn { background: #dc3545; }
-    button.clear-btn:hover { background: #a71d2a; }
 
     #img-file-input { display: none; }
 
@@ -489,12 +555,24 @@
         <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️</button>
         <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（なぞった部分の要素を消します）">🧹</button>
         <button id="select-mode-btn" class="toggle-btn" title="選択モード（ONの間、1回のタップ/クリックでオブジェクトを選択・移動できます）">👆 選択</button>
-        <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップすると線で接続します。接続された要素は動かしても線が繋がったままになります。もう一度押すとオフになります）">🔗 コネクタ</button>
-        <select id="connector-type-select" title="コネクタの線種">
-          <option value="none">― 実線</option>
-          <option value="end">→ 片側矢印</option>
-          <option value="both">↔ 両側矢印</option>
-        </select>
+        <div class="tool-item" style="position:relative;">
+          <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップすると線で接続します。接続された要素は動かしても線が繋がったままになります。押すとON、もう一度押すとOFFになります）">🔗 コネクタ <span id="connector-type-indicator">―</span></button>
+          <div class="color-popup connector-type-popup" id="connector-type-popup">
+            <div class="connector-type-options">
+              <div class="connector-type-group-label">矢印</div>
+              <div class="connector-type-row">
+                <button type="button" class="connector-type-option" data-group="arrow" data-value="none">なし</button>
+                <button type="button" class="connector-type-option" data-group="arrow" data-value="end">→片側</button>
+                <button type="button" class="connector-type-option" data-group="arrow" data-value="both">↔両側</button>
+              </div>
+              <div class="connector-type-group-label">線種</div>
+              <div class="connector-type-row">
+                <button type="button" class="connector-type-option" data-group="dash" data-value="solid">実線</button>
+                <button type="button" class="connector-type-option" data-group="dash" data-value="dashed">破線</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 2. ペン設定（直前の描画ツールに直結する設定） -->
@@ -505,7 +583,7 @@
           <input type="color" id="pen-color" class="native-color-input-hidden" value="#222222">
           <div class="color-popup" id="pen-color-popup">
             <div class="color-preset-grid" data-target="pen-color"></div>
-            <button type="button" class="color-more-btn" data-target="pen-color">🎨 もっと見る…</button>
+            <label class="color-more-btn" for="pen-color">🎨 もっと見る…</label>
           </div>
         </div>
         <div class="tool-item" title="ペンの太さ">
@@ -515,18 +593,8 @@
         </div>
       </div>
 
-      <!-- 3. 挿入（図形・画像/PDFなど、キャンバスに新しく何かを追加する操作をまとめる） -->
+      <!-- 3. 挿入（画像/PDFなど、キャンバスに新しく何かを追加する操作をまとめる） -->
       <div class="tool-group">
-        <div class="tool-item" title="図形挿入">
-          <span>図形:</span>
-          <select id="shape-select">
-            <option value="" selected>＋ 図形</option>
-            <option value="line">直線</option>
-            <option value="arrow">矢印</option>
-            <option value="rect">四角形</option>
-            <option value="circle">円</option>
-          </select>
-        </div>
         <label class="file-label" title="画像・PDFを挿入">
           🖼️ 挿入
           <input type="file" id="img-file-input" accept="image/*,application/pdf">
@@ -538,22 +606,11 @@
         <div class="tool-item" title="フォント選択">
           <span>文字:</span>
           <select id="font-family">
-            <optgroup label="教科書体 / 学修">
-              <option value="'UD デジタル 教科書体 N-R', 'BIZ UDPデジタル教科書体 NK-R', 'YuKyokasho', serif">UDデジタル教科書体</option>
-            </optgroup>
-            <optgroup label="ゴシック体 (標準・UD)">
-              <option value="'Meiryo', 'ヒラギノ角ゴ ProN', sans-serif">メイリオ / ヒラギノ</option>
-              <option value="'BIZ UDPGothic', 'BIZ UDGothic', sans-serif" selected>BIZ UDゴシック</option>
-              <option value="'Yu Gothic', '游ゴシック', sans-serif">游ゴシック</option>
-            </optgroup>
-            <optgroup label="明朝体">
-              <option value="'BIZ UDPMincho', 'BIZ UDMincho', serif">BIZ UD明朝</option>
-              <option value="'Yu Mincho', serif">游明朝</option>
-            </optgroup>
-            <optgroup label="デザイン・その他">
-              <option value="'Hiragino Maru Gothic ProN', sans-serif">丸ゴシック体</option>
-              <option value="'Comic Sans MS', cursive">ポップ体</option>
-            </optgroup>
+            <option value="'Yu Gothic', '游ゴシック', 'Hiragino Kaku Gothic ProN', sans-serif" selected>ゴシック体</option>
+            <option value="'Yu Mincho', '游明朝', 'Hiragino Mincho ProN', serif">明朝体</option>
+            <option value="'UD デジタル 教科書体 N-R', 'BIZ UDPゴシック', sans-serif">UD教科書体</option>
+            <option value="'Comic Sans MS', 'HGP創英角ポップ体', cursive">ポップ体</option>
+            <option value="'Meiryo', sans-serif">メイリオ</option>
           </select>
         </div>
         <div class="tool-item" title="文字サイズ">
@@ -565,20 +622,36 @@
           <input type="color" id="text-color" class="native-color-input-hidden" value="#222222">
           <div class="color-popup" id="text-color-popup">
             <div class="color-preset-grid" data-target="text-color"></div>
-            <button type="button" class="color-more-btn" data-target="text-color">🎨 もっと見る…</button>
+            <label class="color-more-btn" for="text-color">🎨 もっと見る…</label>
           </div>
         </div>
       </div>
 
       <!-- 5. 画面・背景（キャンバス全体の見え方に関する設定） -->
       <div class="tool-group">
-        <div class="tool-item" title="背景色">
+        <div class="tool-item" title="背景色（場面に応じて選んでください）">
           <span>背景:</span>
           <select id="bg-style">
-            <option value="#ffffff">白（方眼）</option>
-            <option value="#f8f9fa">薄グレー（方眼）</option>
-            <option value="#fbf7ee">クリーム（方眼）</option>
-            <option value="#1e1e1e">ダーク（方眼）</option>
+            <option value="#ffffff">白（屋外・直射日光下向け）</option>
+            <option value="#f4ecd8">セピア（長時間の室内使用・目に優しい）</option>
+            <option value="#1c3d2e">黒板（教室の黒板風）</option>
+            <option value="#2b2d31">ディム（薄暗い室内向け・純黒よりマイルド）</option>
+            <option value="#1e1e1e">ダーク（暗い室内向け・目の負担軽減を優先）</option>
+            <option value="#000000">漆黒（有機ELでの省エネを最優先・完全に暗い場所向け）</option>
+          </select>
+        </div>
+        <div class="tool-item" title="用紙サイズグリッド（縦横に敷き詰めて表示）">
+          <span>用紙:</span>
+          <select id="paper-size-select">
+            <option value="">なし</option>
+            <option value="b5-portrait">B5 縦</option>
+            <option value="b5-landscape">B5 横</option>
+            <option value="a4-portrait" selected>A4 縦</option>
+            <option value="a4-landscape">A4 横</option>
+            <option value="b4-portrait">B4 縦</option>
+            <option value="b4-landscape">B4 横</option>
+            <option value="a3-portrait">A3 縦</option>
+            <option value="a3-landscape">A3 横</option>
           </select>
         </div>
         <button id="touch-pan-lock-btn" class="toggle-btn" title="画面スクロール固定">✋ 移動固定</button>
@@ -648,7 +721,7 @@
           <li><b>Ctrl（Macは⌘）+ クリック/ドラッグ</b>: パソコンで、押している間だけ選択モードとして扱われます。</li>
           <li><b>削除</b>: 選択した状態で「🗑️」ボタン、またはキーボードの Delete / Backspace で削除できます。</li>
           <li><b>🔗 コネクタ</b>: メニューの「🔗 コネクタ」を押すとON、もう一度押すとOFF（ペンモードに戻ります）。線でつなぎたい2つの要素（手書き・文字・画像・図形）を順にタップすると、それぞれの図形の縁まで伸びる線が引かれます（図形の内側を突き抜けないよう、中心ではなく輪郭に接続されます）。1つ目をタップするとオレンジ色になり選択中を示します。同じ要素をもう一度タップ、何もない場所をタップ、またはEscキーで選択を取り消せます。つないだあとに要素を動かすと、線も自動的に追従します。要素を削除すると、それにつながっていた線も一緒に消えます。</li>
-          <li><b>🔗 コネクタの線種と色</b>: コネクタボタンの隣のメニューで「実線」「片側矢印」「両側矢印」を切り替えられます（選んでから接続すると、その見た目で線が引かれます。作成後の線種の変更はできません）。線の色は、その時点で「✏️ 色」に設定されている色が使われます。</li>
+          <li><b>🔗 コネクタの見た目と色</b>: 「🔗 コネクタ」ボタンをONにすると選択メニューがその場で開きます。「矢印」（なし／片側／両側）と「線種」（実線／破線、デフォルトは実線）はそれぞれ独立して選べます。選んだ内容はボタン横の記号（例：「→」＝片側矢印の実線、「↔╌」＝両側矢印の破線）で確認できます。メニュー外をタップすると閉じます（作成後の変更はできません）。線の色は、その時点で「✏️ 色」に設定されている色が使われます。</li>
           <li><b>🔗 コネクタ－注意点</b>: 手書きの線などナナメに傾いた図形の場合、接続点は図形を囲む長方形（バウンディングボックス）の縁を基準に計算されるため、見た目の輪郭と数ピクセルずれることがあります。</li>
         </ul>
       </div>
@@ -663,10 +736,19 @@
       </div>
 
       <div class="modal-section">
+        <h4>🗒️ 背景の格子線と用紙サイズグリッド</h4>
+        <ul>
+          <li><b>背景色</b>: 場面に応じて選べます。<b>白</b>＝画面を最大限明るくできるので屋外・直射日光下で見やすい／<b>セピア</b>＝暖色で目に優しく、室内での長時間の書き込みに／<b>黒板</b>＝教室の黒板をイメージした深緑色／<b>ディム</b>＝薄暗い部屋で、純黒ほど強いコントラストにしたくないときに／<b>ダーク</b>＝暗い部屋向けで、真っ黒より少し明るいグレーにすることで目の負担（強すぎるコントラストによる疲れ）を抑えています／<b>漆黒</b>＝有機EL(OLED)画面では黒い画素は発光しないため、真っ黒にするほど消費電力を抑えられます。バッテリー節約を最優先したい、完全に暗い場所での使用に向いています。</li>
+          <li><b>背景の格子線</b>: 方眼の1マスはおよそ1cm相当（フォントサイズと同じ基準＝96px=1インチで換算）です。破線で描かれているのは、下記の「用紙サイズグリッド」（実線）と見分けやすくするためです。</li>
+          <li><b>用紙サイズグリッド</b>: 「用紙」のメニューからB5／A4／B4／A3をそれぞれ縦・横で選ぶと、その用紙サイズちょうどの実線の区切りが画面全体に縦横どこまでも敷き詰められ、複数ページ分のレイアウトの目安になります（背景の格子より濃い実線です）。「なし」を選べば非表示に戻ります。このグリッドは画面上の目安であり、PNG/PDFへの書き出しには含まれません。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
         <h4>📁 ファイルの読み込みと出力保存</h4>
         <ul>
           <li><b>読み込み（📁 ファイル）</b>: お手持ちの画像（PNG/JPEG）や<b>PDFファイル</b>を取り込んで、その上に手書きやメモを重ねることができます。複数ページのPDFにも対応しています。</li>
-          <li><b>書き出し（💾 PNG / 📄 PDF）</b>: キャンバスに書いたすべての内容（手書き・文字・画像）を網羅して、1枚の画像（PNG）またはPDFとして保存できます。</li>
+          <li><b>書き出し（💾 PNG / 📄 PDF）</b>: キャンバスに書いたすべての内容（手書き・文字・画像）を網羅して、1枚の画像（PNG）またはPDFとして保存できます。「用紙」でB5／A4／B4／A3のいずれかを選んだ状態でPDF書き出しすると、「用紙サイズごとにページを分けるか」を確認するダイアログが出ます。分割を選ぶと、実際に描かれているマスだけが、それぞれ実寸サイズのPDFページとして書き出されます。</li>
         </ul>
       </div>
 
@@ -691,9 +773,66 @@
     </div>
   </div>
 
+  <!-- PDF書き出し時の「用紙サイズごとに分割するか」確認モーダル。
+       ブラウザ標準のconfirm()は、プレビュー用のサンドボックス化された
+       iframeなど一部の環境でブロックされ、呼び出すだけで例外を起こす
+       ことがあるため、アプリ内の通常のUIとして自前で用意している。 -->
+  <div id="pdf-split-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width:380px; text-align:center;">
+      <h3 style="margin-top:0;">📄 PDF書き出し</h3>
+      <p id="pdf-split-modal-text" style="margin:12px 0; line-height:1.6; text-align:left;"></p>
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button id="pdf-split-yes-btn" style="flex:1;">用紙サイズごとに分割</button>
+        <button id="pdf-split-no-btn" style="flex:1; background:#6c757d;">1ページに収める</button>
+      </div>
+      <button id="pdf-split-cancel-btn" style="width:100%; margin-top:10px; padding:10px; font-size:14px; background:#e9ecef; color:#333;">キャンセル</button>
+    </div>
+  </div>
+
   <script>
     const STORAGE_KEY = 'smart_memo_canvas_data_v26';
-    const GRID_SIZE = 100;
+    const GRID_SIZE = 40; // 破線の方眼1マスのサイズ(px)。下記PX_PER_MM換算でおよそ1cm相当
+
+    // --- 実寸（mm）換算の基準 ---
+    // このアプリのcanvas単位(px)を、CSSや印刷で標準的に使われる
+    // 「96px = 1インチ = 25.4mm」という換算にそろえる。文字ツールの
+    // 「フォントサイズ」も同じpx単位で指定しているため、この換算を採用する
+    // ことで「フォントサイズ○○px」がそのまま実寸で何mmかを一意に表せるようになり、
+    // 用紙サイズ（mm単位）とも矛盾なく対応づけられる。
+    const PX_PER_MM = 96 / 25.4;
+
+    // 日本国内でよく使われるJIS規格の寸法（mm）。B4/B5はISO B列とは異なるJIS B列の値。
+    const PAPER_SIZES_MM = {
+      b5: { w: 182, h: 257 },
+      a4: { w: 210, h: 297 },
+      b4: { w: 257, h: 364 },
+      a3: { w: 297, h: 420 }
+    };
+
+    // 選択中の用紙キー（例: 'a4-portrait'）から、canvas単位(px)・mm両方の
+    // 用紙サイズを求める。「なし」または不正な値なら null。
+    function getPaperSizePx(paperSizeKey) {
+      if (!paperSizeKey) return null;
+      const [key, orientation] = paperSizeKey.split('-');
+      const size = PAPER_SIZES_MM[key];
+      if (!size) return null;
+      let wMM = size.w, hMM = size.h;
+      if (orientation === 'landscape') { const t = wMM; wMM = hMM; hMM = t; }
+      return { w: wMM * PX_PER_MM, h: hMM * PX_PER_MM, wMM, hMM };
+    }
+
+    // 背景色が「暗い系」かどうかを判定する。特定の1色（旧#1e1e1e）だけを
+    // 決め打ちで見ていると、背景色の選択肢を増やすたびに判定漏れが起きる
+    // ため、輝度計算で汎用的に判定する（新しい暗い系の色を追加しても
+    // 自動的に正しく扱われる）。
+    function isDarkBackgroundColor(hex) {
+      if (!hex || hex[0] !== '#' || hex.length < 7) return false;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance < 0.5;
+    }
 
     let pagesData = [null];
     let currentPageIndex = 0;
@@ -815,27 +954,74 @@
 
     let lastHandwritingBounds = null;
 
-    function generateGridPattern(bgColor) {
+    // 背景の「原点マーク」など、実際の描画内容ではない背景ガイド用オブジェクトかどうかを
+    // 判定する共通ヘルパー。選択・エクスポート・削除などの対象から一律で除外するために使う。
+    function isGuideObject(obj) {
+      return !!(obj && obj.isOriginMark);
+    }
+
+    // 背景に敷き詰めるタイル画像を1枚生成する。
+    // ・細かい方眼は常に破線で描く（1マス=GRID_SIZE px、およそ1cm相当）。
+    // ・用紙サイズが選択されている場合は、そのサイズちょうどをタイル1枚の
+    //   サイズにし、タイルの外周を実線でなぞる。これをFabricの繰り返し
+    //   パターンとして敷き詰めることで、「細かい方眼」の上に「用紙サイズの
+    //   区切り」が縦横に何枚も連続して並んだ状態を、1枚の背景パターンだけで
+    //   実現している（用紙サイズ用に別オブジェクトは作らない）。
+    function generateGridPattern(bgColor, paperSizeKey) {
+      const isDark = isDarkBackgroundColor(bgColor);
+      const gridLineColor = isDark ? '#3d3d3d' : 'rgba(0, 0, 0, 0.13)';
+      // 用紙サイズの区切りは、細かい方眼よりはっきり見えるよう意図的に濃くする
+      const paperLineColor = isDark ? '#6b6b6b' : 'rgba(0, 0, 0, 0.32)';
+
+      const paperPx = getPaperSizePx(paperSizeKey);
+      const tileW = paperPx ? Math.round(paperPx.w) : GRID_SIZE;
+      const tileH = paperPx ? Math.round(paperPx.h) : GRID_SIZE;
+
       const patternCanvas = document.createElement('canvas');
-      patternCanvas.width = GRID_SIZE;
-      patternCanvas.height = GRID_SIZE;
+      patternCanvas.width = tileW;
+      patternCanvas.height = tileH;
       const ctx = patternCanvas.getContext('2d');
 
       ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, GRID_SIZE, GRID_SIZE);
+      ctx.fillRect(0, 0, tileW, tileH);
 
-      const isDark = (bgColor === '#1e1e1e');
-      const lineColor = isDark ? '#3d3d3d' : 'rgba(0, 0, 0, 0.13)'; // 視認性向上のため以前より濃くした
-
-      ctx.strokeStyle = lineColor;
+      // --- 細かい方眼（破線）をタイル全体に敷き詰める ---
+      // ダッシュのパターン長(dash+gap)がGRID_SIZEを割り切れる値になるよう
+      // 選んであり、マス目を繰り返し並べても継ぎ目でダッシュの位相がずれない。
+      // 各マスにつき上辺・左辺だけ描けば、隣接するマスの辺と合わさって
+      // 格子全体が漏れなく描かれる。
+      ctx.strokeStyle = gridLineColor;
       ctx.lineWidth = 1;
-      ctx.strokeRect(0, 0, GRID_SIZE, GRID_SIZE);
+      ctx.setLineDash([4, 4]); // 4pxの実線 + 4pxの隙間（合計8px。GRID_SIZE=40を割り切れる）
 
-      return patternCanvas.toDataURL();
+      for (let gy = 0; gy < tileH; gy += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(0, gy);
+        ctx.lineTo(tileW, gy);
+        ctx.stroke();
+      }
+      for (let gx = 0; gx < tileW; gx += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(gx, 0);
+        ctx.lineTo(gx, tileH);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]); // 以降の実線（用紙サイズの区切り）に影響しないようリセット
+
+      // --- 用紙サイズの区切り線（実線） ---
+      // タイルの外周がそのまま「用紙1枚分の境界」になる。パターンとして
+      // 繰り返し敷き詰めることで、縦横どちらにも用紙サイズの格子が並ぶ。
+      if (paperPx) {
+        ctx.strokeStyle = paperLineColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, tileW, tileH);
+      }
+
+      return { dataUrl: patternCanvas.toDataURL(), tileW, tileH };
     }
 
     function drawCenterOriginMark() {
-      const isDark = (bgStyleSelect.value === '#1e1e1e');
+      const isDark = isDarkBackgroundColor(bgStyleSelect.value);
       const markColor = isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)';
 
       const existingMark = canvas.getObjects().find(o => o.isOriginMark);
@@ -855,9 +1041,17 @@
     }
 
     function updateCanvasBackground(bgColor) {
-      const dataUrl = generateGridPattern(bgColor);
+      const paperSizeKey = paperSizeSelect ? paperSizeSelect.value : '';
+      const { dataUrl, tileW, tileH } = generateGridPattern(bgColor, paperSizeKey);
       fabric.Image.fromURL(dataUrl, (img) => {
         const pattern = new fabric.Pattern({ source: img.getElement(), repeat: 'repeat' });
+        if (paperSizeKey) {
+          // 原点(0,0)がちょうど用紙1枚分の中心にくるよう、タイルの並びを
+          // 半分ずらす（原点マーク＝最初に用紙の目安として見せていた位置との
+          // 一貫性のため）。「なし」の場合は従来通りずらさない。
+          pattern.offsetX = -tileW / 2;
+          pattern.offsetY = -tileH / 2;
+        }
         canvas.setBackgroundColor(pattern, () => {
           drawCenterOriginMark();
           canvas.renderAll();
@@ -963,7 +1157,7 @@
       clearTimeout(clickTimer);
       clickTimer = setTimeout(() => { clickCount = 0; lastTarget = null; }, 400);
 
-      const willSelect = target && !target.isOriginMark && !target.isLocked && (
+      const willSelect = target && !isGuideObject(target) && !target.isLocked && (
         canvas.getActiveObject() === target || // 既に選択中のオブジェクトへの単純クリック＆ドラッグは常に「移動」として扱う
         ((target.type === 'i-text' || target.type === 'image') && clickCount >= 2)
       );
@@ -1013,7 +1207,7 @@
 
     function showLockIconFor(target) {
       removeLockIcon();
-      if (!target || target.isOriginMark) return;
+      if (!target || isGuideObject(target)) return;
       const bounds = target.getBoundingRect(true, true); // キャンバス座標系での境界
       const icon = new fabric.Text(target.isLocked ? '🔓' : '🔒', {
         // 対象オブジェクトの当たり判定（targetFindTolerance）と重ならないよう、
@@ -1054,7 +1248,7 @@
         // 固定済みのオブジェクトも対象に含める（固定解除のためにロックアイコンを
         // 表示する必要があるため）。実際に選択状態にする(setActiveObject)かどうかは
         // mouse:up側で isLocked を見て判断する。
-        pendingLongPressAction = (target && !target.isOriginMark)
+        pendingLongPressAction = (target && !isGuideObject(target))
           ? { type: 'select', target }
           : { type: 'selectMode' };
         if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
@@ -1083,8 +1277,8 @@
     // --- fabric.Line に矢印（矢じり）描画を追加する ---
     // isConnectorLine な fabric.Line インスタンスに限り、arrowType
     // ('none' | 'end' | 'both' | 'start') に応じて端点へ矢じりを描き足す。
-    // 図形挿入の「直線」など、isConnectorLine を持たない通常の
-    // fabric.Line には一切影響しない。
+    // isConnectorLine を持たない通常の fabric.Line（手書き→図形自動認識で
+    // 変換された直線など）には一切影響しない。
     // クラスを新設せず既存のfabric.Lineのプロトタイプをそのまま拡張して
     // いるのは、コネクタ線を保存/復元(toJSON・loadFromJSON)した際に
     // 標準のfabric.Line.fromObjectでそのまま正しく復元でき、矢印の
@@ -1229,16 +1423,17 @@
       ensureConnId(objA);
       ensureConnId(objB);
 
-      // 線種（実線／片側矢印／両側矢印）と色は、その時点でツールバーの
-      // 「🔗 コネクタ」隣の選択と「ペンの色」に設定されているものを使う
-      // （図形挿入時の色の扱いと合わせ、ペンの色をそのまま流用する）。
-      const arrowType = connectorTypeSelect ? connectorTypeSelect.value : 'none';
+      // 矢印の種類・線種（実線/破線）・色は、その時点で「🔗 コネクタ」の
+      // 線種選択メニューで選ばれているものと「ペンの色」を使う。
+      const arrowType = connectorArrowType;
       const color = penColorInput.value;
 
       const line = new fabric.Line([0, 0, 0, 0], {
         stroke: color,
         strokeWidth: 2,
-        strokeDashArray: [6, 4],
+        // デフォルトは実線（strokeDashArray未指定）。「破線」が選ばれている
+        // ときだけダッシュパターンを設定する。
+        strokeDashArray: connectorDashed ? [8, 4] : null,
         selectable: true,
         evented: true,
         hasControls: false, // 端点を個別にドラッグされると接続元/先とズレて同期が崩れるため無効化
@@ -1376,7 +1571,7 @@
         // 誤操作防止の確認ダイアログは、連続してなぞる操作の妨げになるため廃止し、
         // 代わりに元に戻す(Ctrl+Z)でいつでも復元できることを安全網とする。
         isErasingDrag = true;
-        if (target && !target.isOriginMark && !target.isLocked) {
+        if (target && !isGuideObject(target) && !target.isLocked) {
           canvas.remove(target);
           canvas.renderAll();
           updateDeleteButtonState();
@@ -1391,7 +1586,7 @@
 
         // 何もない場所／原点マーク／固定中の要素をタップした場合は、
         // 選択待ちだった1つ目の要素があればキャンセルするだけにする
-        if (!target || target.isOriginMark || target.isLocked) {
+        if (!target || isGuideObject(target) || target.isLocked) {
           cancelPendingConnectorSelection();
           return;
         }
@@ -1428,7 +1623,7 @@
         // evt.button===2 になることがある。以前はパン判定(button===2)が
         // Ctrl判定より先に評価されていたため、その場合だけ選択のつもりが
         // パン（Shiftと同じ挙動）になってしまう不安定さの原因だった。
-        if (target && !target.isOriginMark && !target.isLocked) {
+        if (target && !isGuideObject(target) && !target.isLocked) {
           canvas.setActiveObject(target);
           canvas.renderAll();
           updateDeleteButtonState();
@@ -1447,7 +1642,7 @@
       // クリック回数のカウントは precomputeInteractionMode 側で既に行っているため、
       // ここでは結果(clickCount / lastTarget)を使って実際の選択処理のみ行う。
       // 手書き線(path)の3回連打による選択は廃止（長押し等に統一）。
-      if (target && !target.isOriginMark && !target.isLocked && (target.type === 'i-text' || target.type === 'image') && clickCount >= 2) {
+      if (target && !isGuideObject(target) && !target.isLocked && (target.type === 'i-text' || target.type === 'image') && clickCount >= 2) {
         canvas.setActiveObject(target);
         if (target.type === 'i-text') {
           target.enterEditing();
@@ -1479,7 +1674,7 @@
       // 消しゴムでなぞっている最中、通過した場所のオブジェクトを連続的に消す
       if (isErasingDrag && currentDrawMode === 'eraser') {
         const target = canvas.findTarget(evt, false);
-        if (target && !target.isOriginMark && !target.isLocked) {
+        if (target && !isGuideObject(target) && !target.isLocked) {
           canvas.remove(target);
           canvas.renderAll();
           updateDeleteButtonState();
@@ -1601,8 +1796,53 @@
     const eraserModeBtn = document.getElementById('eraser-mode-btn');
     const selectModeBtn = document.getElementById('select-mode-btn');
     const connectorBtn = document.getElementById('connector-btn');
-    const connectorTypeSelect = document.getElementById('connector-type-select');
+    const connectorTypePopup = document.getElementById('connector-type-popup');
+    // #toolbar は角丸表示のため overflow:hidden、さらに backdrop-filter も
+    // 指定しており、backdrop-filter は position:fixed の子要素にとって
+    // ビューポートではなく自分自身を基準にしてしまう（＝containing blockに
+    // なる）性質がある。そのため #toolbar の内側に置いたままだと、
+    // fixedにしても overflow:hidden で切り取られて事実上操作できなかった。
+    // document.body 直下に付け替えることで、この制約から完全に切り離す。
+    document.body.appendChild(connectorTypePopup);
+    const connectorTypeIndicator = document.getElementById('connector-type-indicator');
     const touchPanLockBtn = document.getElementById('touch-pan-lock-btn');
+
+    // --- コネクタの見た目（矢印の種類／線種）選択 ---
+    // 「コネクタボタンを押すと種類選択メニューが出て、選ぶと閉じる」という
+    // 操作にしたいとの要望により、コネクタボタン押下時に開くポップアップ
+    // メニュー方式にしている。矢印の種類（なし／片側／両側）と、線種
+    // （実線／破線）は互いに独立した選択なので、別グループとして扱う。
+    // デフォルトは矢印なし・実線。
+    let connectorArrowType = 'none';
+    let connectorDashed = false;
+    const CONNECTOR_ARROW_ICON = { none: '―', end: '→', both: '↔' };
+
+    function updateConnectorTypeUI() {
+      connectorTypePopup.querySelectorAll('.connector-type-option[data-group="arrow"]').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.value === connectorArrowType);
+      });
+      connectorTypePopup.querySelectorAll('.connector-type-option[data-group="dash"]').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.value === (connectorDashed ? 'dashed' : 'solid'));
+      });
+      const arrowIcon = CONNECTOR_ARROW_ICON[connectorArrowType] || '―';
+      connectorTypeIndicator.textContent = connectorDashed ? (arrowIcon + '╌') : arrowIcon;
+    }
+    updateConnectorTypeUI();
+
+    connectorTypePopup.querySelectorAll('.connector-type-option').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (btn.dataset.group === 'arrow') {
+          connectorArrowType = btn.dataset.value;
+        } else if (btn.dataset.group === 'dash') {
+          connectorDashed = (btn.dataset.value === 'dashed');
+        }
+        updateConnectorTypeUI();
+        // 矢印・線種は独立した2つの選択なので、片方を選んだだけでは閉じない。
+        // 両方選び終えたら、メニュー外をタップして閉じる（またはコネクタボタンを
+        // 再度押すとモードごとオフになる）。
+      });
+    });
 
     function setDrawMode(mode) {
       currentDrawMode = mode;
@@ -1615,9 +1855,11 @@
         isSelectMode = false;
         selectModeBtn.classList.remove('active');
       }
-      // コネクタモードから離れる場合、選択待ちだった1つ目の要素の見た目を元に戻す
-      if (mode !== 'connector' && pendingConnectorSource) {
-        cancelPendingConnectorSelection();
+      // コネクタモードから離れる場合、選択待ちだった1つ目の要素の見た目を元に戻し、
+      // 開いたままの線種選択ポップアップがあれば閉じる
+      if (mode !== 'connector') {
+        if (pendingConnectorSource) cancelPendingConnectorSelection();
+        closeFloatingPopup(connectorTypePopup);
       }
       applyBrushSettings();
       updateSelectModeIndicator();
@@ -1631,7 +1873,13 @@
       // 以前は常に setDrawMode('connector') を呼ぶだけだったため、
       // ONの状態でボタンを押しても何も変わらず「解除されない」ように
       // 見える不具合があった。
-      setDrawMode(currentDrawMode === 'connector' ? 'pen' : 'connector');
+      if (currentDrawMode === 'connector') {
+        setDrawMode('pen');
+      } else {
+        setDrawMode('connector');
+        // ONにした直後に線種選択メニューを開き、その場で実線/矢印を選べるようにする
+        openFloatingPopup(connectorTypePopup, connectorBtn);
+      }
     });
 
     // --- 選択モード（トグルボタン） ---
@@ -1694,52 +1942,6 @@
       updateSelectModeIndicator();
       return true;
     }
-
-    document.getElementById('shape-select').addEventListener('change', (e) => {
-      const shapeType = e.target.value;
-      if (!shapeType) return;
-
-      const center = getCenterPosition();
-      const color = penColorInput.value;
-      let shape;
-
-      if (shapeType === 'line') {
-        shape = new fabric.Line([-50, 0, 50, 0], { stroke: color, strokeWidth: 3, left: center.x, top: center.y, originX: 'center', originY: 'center' });
-      } else if (shapeType === 'arrow') {
-        // 矢印（矢軸＋矢頭）: 矢頭の底辺の中心に矢軸の先端がぴったり合うよう、
-        // 座標を直接計算して配置する（グリッド線を重ねた描画検証で、
-        // 軸と矢頭の中心が数学的に一致していることを確認済み）。
-        // また、グループ自体もクリック位置＝図形の視覚的中心となるよう
-        // originX/Y を 'center' にする（以前は左上基準になっており、
-        // 挿入位置と見た目の中心がズレる一因になっていた）。
-        const headLength = 16;
-        const headHalfWidth = 7;
-        const totalLength = 90;
-        const shaftEndX = totalLength / 2 - headLength; // 矢頭の底辺のx座標
-        const tipX = totalLength / 2;                   // 矢頭の先端のx座標
-        const shaftStartX = -totalLength / 2;
-
-        const line = new fabric.Line([shaftStartX, 0, shaftEndX, 0], { stroke: color, strokeWidth: 3 });
-        const head = new fabric.Polygon([
-          { x: shaftEndX, y: -headHalfWidth },
-          { x: tipX, y: 0 },
-          { x: shaftEndX, y: headHalfWidth }
-        ], { fill: color, stroke: color, strokeWidth: 1, strokeLineJoin: 'round' });
-        shape = new fabric.Group([line, head], { left: center.x, top: center.y, originX: 'center', originY: 'center' });
-      } else if (shapeType === 'rect') {
-        shape = new fabric.Rect({ width: 100, height: 60, fill: 'transparent', stroke: color, strokeWidth: 3, left: center.x, top: center.y, originX: 'center', originY: 'center' });
-      } else if (shapeType === 'circle') {
-        shape = new fabric.Circle({ radius: 40, fill: 'transparent', stroke: color, strokeWidth: 3, left: center.x, top: center.y, originX: 'center', originY: 'center' });
-      }
-
-      if (shape) {
-        canvas.add(shape);
-        canvas.setActiveObject(shape);
-        canvas.renderAll();
-        saveState();
-      }
-      e.target.value = '';
-    });
 
     let history = [];
     let historyStep = -1;
@@ -1877,8 +2079,55 @@
     const fontSizeInput = document.getElementById('font-size-input');
     const textColorInput = document.getElementById('text-color');
     const bgStyleSelect = document.getElementById('bg-style');
+    const paperSizeSelect = document.getElementById('paper-size-select');
     const deleteSelectedBtn = document.getElementById('delete-selected-btn');
     const imgFileInput = document.getElementById('img-file-input');
+
+    // ============================================================
+    // 🪟 フローティングポップアップ共通処理（色パレット／コネクタ種類選択で共用）
+    // ポップアップは position:fixed とし、開くたびに呼び出し元ボタンの
+    // 位置からビューポート座標を計算して配置する。画面端からはみ出す
+    // 場合は自動で位置を補正する。
+    // ============================================================
+    function openFloatingPopup(popupEl, anchorEl) {
+      // 同時に複数のポップアップが開いたままにならないよう、他は閉じる
+      document.querySelectorAll('.color-popup.open').forEach(p => { if (p !== popupEl) p.classList.remove('open'); });
+
+      const rect = anchorEl.getBoundingClientRect();
+      popupEl.style.left = rect.left + 'px';
+      popupEl.style.top = (rect.bottom + 6) + 'px';
+      popupEl._anchorEl = anchorEl; // 外側クリック判定用に紐づけておく
+      popupEl.classList.add('open');
+
+      // 実際のサイズが確定してから、画面端にはみ出さないよう補正する
+      requestAnimationFrame(() => {
+        if (!popupEl.classList.contains('open')) return;
+        const popRect = popupEl.getBoundingClientRect();
+        let left = rect.left;
+        let top = rect.bottom + 6;
+        if (popRect.right > window.innerWidth - 8) {
+          left = Math.max(8, window.innerWidth - popRect.width - 8);
+        }
+        if (left < 8) left = 8;
+        if (popRect.bottom > window.innerHeight - 8) {
+          top = Math.max(8, rect.top - popRect.height - 6); // 収まらなければボタンの上側に表示
+        }
+        popupEl.style.left = left + 'px';
+        popupEl.style.top = top + 'px';
+      });
+    }
+    function closeFloatingPopup(popupEl) { popupEl.classList.remove('open'); }
+
+    // ポップアップの外側をタップ/クリックしたら、開いているポップアップを閉じる。
+    // （呼び出し元ボタン自身のクリックは、各ボタンのclickハンドラ側で
+    //   開閉を制御しているのでここでは閉じない）
+    document.addEventListener('pointerdown', (e) => {
+      document.querySelectorAll('.color-popup.open').forEach(p => {
+        if (p.contains(e.target)) return;
+        if (p._anchorEl && p._anchorEl.contains(e.target)) return;
+        p.classList.remove('open');
+      });
+    });
 
     // ============================================================
     // 🎨 色選択（主要8色パレット＋詳細ピッカー）
@@ -1890,6 +2139,11 @@
     const COLOR_PRESETS = ['#000000', '#ffffff', '#e03131', '#f08c00', '#2f9e44', '#1971c2', '#7048e8', '#495057'];
 
     function setupColorPicker(nativeInput, swatchBtn, popupEl) {
+      // #toolbar の overflow:hidden + backdrop-filter によるクリッピングを
+      // 避けるため、ポップアップは document.body 直下へ付け替える
+      // （詳細は connectorTypePopup のコメント参照）。
+      document.body.appendChild(popupEl);
+
       const grid = popupEl.querySelector('.color-preset-grid');
       COLOR_PRESETS.forEach(color => {
         const sw = document.createElement('button');
@@ -1907,16 +2161,10 @@
       // 色を選択状態に反映する処理など）に外部から呼べるよう公開しておく。
       nativeInput.updateSwatch = syncSwatch;
 
-      function closePopup() { popupEl.classList.remove('open'); }
-      function openPopup() {
-        // 同時に複数のパレットが開いたままにならないよう、他は閉じる
-        document.querySelectorAll('.color-popup.open').forEach(p => { if (p !== popupEl) p.classList.remove('open'); });
-        popupEl.classList.add('open');
-      }
-
       swatchBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (popupEl.classList.contains('open')) closePopup(); else openPopup();
+        if (popupEl.classList.contains('open')) closeFloatingPopup(popupEl);
+        else openFloatingPopup(popupEl, swatchBtn);
       });
 
       grid.querySelectorAll('.color-preset-swatch').forEach(btn => {
@@ -1926,31 +2174,28 @@
           syncSwatch();
           // 既存のペン色/文字色反映ロジック（'input'イベント購読）をそのまま使う
           nativeInput.dispatchEvent(new Event('input', { bubbles: true }));
-          closePopup(); // タップした瞬間にメニューを閉じる
+          closeFloatingPopup(popupEl); // タップした瞬間にメニューを閉じる
         });
       });
 
+      // 「もっと見る」は <label for="..."> にしてある。ブラウザ標準の仕様で、
+      // labelをタップ/クリックすると紐づいたinputへそのままクリックが転送され
+      // 詳細カラーピッカーが開く。これは実際のユーザー操作として扱われるため、
+      // 一部のモバイルブラウザ/WebViewで programmatic な nativeInput.click() が
+      // 効かない（＝「もっと見る」を押しても無反応になる）問題を回避できる。
+      // ここでは明示的な .click() 呼び出しは行わない（二重発火防止）。
       const moreBtn = popupEl.querySelector('.color-more-btn');
       moreBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        closePopup();
-        nativeInput.click(); // ブラウザ標準の詳細カラーピッカーを開く
+        closeFloatingPopup(popupEl);
       });
 
       nativeInput.addEventListener('input', syncSwatch);
-      nativeInput.addEventListener('change', closePopup);
+      nativeInput.addEventListener('change', () => closeFloatingPopup(popupEl));
     }
 
     setupColorPicker(penColorInput, document.getElementById('pen-color-swatch'), document.getElementById('pen-color-popup'));
     setupColorPicker(textColorInput, document.getElementById('text-color-swatch'), document.getElementById('text-color-popup'));
-
-    // パレットの外側をタップ/クリックしたら、開いているパレットを閉じる
-    document.addEventListener('pointerdown', (e) => {
-      document.querySelectorAll('.color-popup.open').forEach(p => {
-        const wrap = p.closest('.color-picker-wrap');
-        if (wrap && !wrap.contains(e.target)) p.classList.remove('open');
-      });
-    });
 
     penColorInput.addEventListener('input', () => { applyBrushSettings(); saveState(); });
     penWidthInput.addEventListener('input', (e) => {
@@ -1989,7 +2234,7 @@
 
     bgStyleSelect.addEventListener('change', (e) => {
       const bgVal = e.target.value;
-      const isDarkTarget = (bgVal === '#1e1e1e');
+      const isDarkTarget = isDarkBackgroundColor(bgVal);
 
       if (isDarkTarget) {
         if (penColorInput.value === '#222222' || penColorInput.value === '#000000') penColorInput.value = '#ffffff';
@@ -2002,7 +2247,7 @@
       textColorInput.updateSwatch && textColorInput.updateSwatch();
 
       canvas.getObjects().forEach(obj => {
-        if (obj.isOriginMark) return;
+        if (isGuideObject(obj)) return;
 
         if (isDarkTarget) {
           if (obj.stroke === '#222222' || obj.stroke === '#000000') obj.set('stroke', '#ffffff');
@@ -2016,6 +2261,13 @@
       applyBrushSettings();
       updateCanvasBackground(bgVal);
       saveState();
+    });
+
+    // 用紙サイズの区切り線の切り替え。背景色/格子と同じく、ページごとでは
+    // なく画面全体に対する表示設定として扱う（履歴には残さず、常に選択中の
+    // 内容で背景パターンを丸ごと再生成する）。
+    paperSizeSelect.addEventListener('change', () => {
+      updateCanvasBackground(bgStyleSelect.value);
     });
 
     function getCenterPosition() {
@@ -2123,7 +2375,7 @@
     function deleteSelectedObjects() {
       const activeObjects = canvas.getActiveObjects();
       if (activeObjects && activeObjects.length > 0) {
-        activeObjects.forEach(obj => { if (!obj.isOriginMark) canvas.remove(obj); });
+        activeObjects.forEach(obj => { if (!isGuideObject(obj)) canvas.remove(obj); });
         canvas.discardActiveObject();
         canvas.renderAll();
         updateDeleteButtonState();
@@ -2134,7 +2386,7 @@
 
     deleteSelectedBtn.addEventListener('click', deleteSelectedObjects);
     function updateDeleteButtonState() {
-      const activeObjects = canvas.getActiveObjects().filter(o => !o.isOriginMark);
+      const activeObjects = canvas.getActiveObjects().filter(o => !isGuideObject(o));
       deleteSelectedBtn.disabled = !(activeObjects && activeObjects.length > 0);
     }
 
@@ -2563,7 +2815,7 @@
       // 発火しない、または native のズーム/移動ジェスチャーに化けることがあり、
       // タッチ操作をこの一本に頼るのは不安定だったため。
       if (options.e && options.e.pointerType === 'touch') return;
-      if (options.target && !options.target.isOriginMark) return;
+      if (options.target && !isGuideObject(options.target)) return;
       if (exitSelectModeIfActive()) return;
       const pointer = canvas.getPointer(options.e);
       createNewTextBox(pointer.x, pointer.y);
@@ -2604,7 +2856,7 @@
         lastTapTime = 0;
         lastTapPos = null;
         const target = canvas.findTarget(e, false);
-        if (target && !target.isOriginMark) return; // 既存要素の上は無視（選択/編集操作に譲る）
+        if (target && !isGuideObject(target)) return; // 既存要素の上は無視（選択/編集操作に譲る）
         if (e.cancelable) e.preventDefault(); // ネイティブのズーム等を確実に打ち消す
         if (exitSelectModeIfActive()) return;
         const pointer = canvas.getPointer(e);
@@ -2707,15 +2959,16 @@
       const originMark = canvas.getObjects().find(o => o.isOriginMark);
       if (originMark) originMark.visible = false;
 
-      // 出力（PNG/PDF）にはマス目模様を映したくないため、一時的に無地の背景色へ
-      // 差し替えてから書き出し、終わったら元のマス目パターンに戻す。
+      // 出力（PNG/PDF）には格子模様（細かい方眼・用紙サイズの区切りとも）を
+      // 映したくないため、一時的に無地の背景色へ差し替えてから書き出し、
+      // 終わったら元のパターンに戻す。
       const originalBackground = canvas.backgroundColor;
       canvas.backgroundColor = bgStyleSelect.value;
 
       canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
       canvas.renderAll();
 
-      const objects = canvas.getObjects().filter(o => o.visible && !o.isOriginMark);
+      const objects = canvas.getObjects().filter(o => o.visible && !isGuideObject(o));
 
       if (objects.length === 0) {
         canvas.setViewportTransform(currentVpt);
@@ -2763,43 +3016,191 @@
     }
 
     document.getElementById('export-btn').addEventListener('click', () => {
-      const exportData = getExportDataURL();
-      if (!exportData) return alert('保存する内容がありません。');
-      const link = document.createElement('a');
-      link.download = `memo_${new Date().toISOString().slice(0,10)}.png`;
-      link.href = exportData.dataURL;
-      link.click();
+      try {
+        const exportData = getExportDataURL();
+        if (!exportData) return alert('保存する内容がありません。');
+        const link = document.createElement('a');
+        link.download = `memo_${new Date().toISOString().slice(0,10)}.png`;
+        link.href = exportData.dataURL;
+        link.click();
+      } catch (err) {
+        console.error('PNG書き出しエラー:', err);
+        alert('PNGの書き出し中にエラーが発生しました。\n\n' + (err && err.message ? err.message : err));
+      }
     });
 
+    // 従来通り：全体を1ページに収まるよう縮小してPDF化する
+    function exportPdfFitToSinglePage() {
+      try {
+        const exportData = getExportDataURL();
+        if (!exportData) return alert('保存する内容がありません。');
+
+        const { jsPDF } = window.jspdf;
+        const isLandscape = exportData.width > exportData.height;
+        const pdf = new jsPDF(isLandscape ? 'l' : 'p', 'mm', 'a4');
+
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        const margin = 10;
+        const maxW = pdfWidth - (margin * 2);
+        const maxH = pdfHeight - (margin * 2);
+
+        const ratio = Math.min(maxW / exportData.width, maxH / exportData.height);
+        const renderW = exportData.width * ratio;
+        const renderH = exportData.height * ratio;
+
+        const xPos = (pdfWidth - renderW) / 2;
+        const yPos = (pdfHeight - renderH) / 2;
+
+        pdf.addImage(exportData.dataURL, 'PNG', xPos, yPos, renderW, renderH);
+        pdf.save(`memo_${new Date().toISOString().slice(0,10)}.pdf`);
+      } catch (err) {
+        console.error('PDF書き出しエラー（1ページ収め）:', err);
+        alert('PDFの書き出し中にエラーが発生しました。\n\n' + (err && err.message ? err.message : err));
+      }
+    }
+
+    // 用紙サイズごとにページを分けてPDF化する。
+    // 背景の「用紙サイズの区切り線」と同じ基準（原点0,0が用紙1枚分の中心に
+    // くるようタイルを半分ずらす）でマス目を割り出し、実際に何か描かれている
+    // マスだけをそれぞれ実寸（mm）のPDFページとして書き出す。
+    function exportPdfSplitByPaper(paperSizeKey) {
+      try {
+        const paperPx = getPaperSizePx(paperSizeKey);
+        if (!paperPx) return exportPdfFitToSinglePage(); // 保険（本来ここには来ない）
+
+        const activeObj = canvas.getActiveObject();
+        if (activeObj && activeObj.isEditing) activeObj.exitEditing();
+        canvas.discardActiveObject();
+
+        const objectsAll = canvas.getObjects().filter(o => o.visible && !isGuideObject(o));
+        if (objectsAll.length === 0) return alert('保存する内容がありません。');
+
+        const tileW = paperPx.w, tileH = paperPx.h;
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        objectsAll.forEach(obj => {
+          const b = obj.getBoundingRect(true, true);
+          minX = Math.min(minX, b.left);
+          minY = Math.min(minY, b.top);
+          maxX = Math.max(maxX, b.left + b.width);
+          maxY = Math.max(maxY, b.top + b.height);
+        });
+
+        // 背景パターンのoffsetX/offsetY=-tileW/2,-tileH/2（原点が用紙の中心）と
+        // 揃うよう、マス目の列・行番号を求める
+        const startCol = Math.floor((minX + tileW / 2) / tileW);
+        const endCol = Math.floor((maxX + tileW / 2) / tileW);
+        const startRow = Math.floor((minY + tileH / 2) / tileH);
+        const endRow = Math.floor((maxY + tileH / 2) / tileH);
+
+        const isLandscape = paperPx.wMM > paperPx.hMM;
+
+        const currentVpt = canvas.viewportTransform.slice();
+        const originMark = canvas.getObjects().find(o => o.isOriginMark);
+        const originalBackground = canvas.backgroundColor;
+        let pdf, pageAdded = false;
+
+        try {
+          if (originMark) originMark.visible = false;
+          canvas.backgroundColor = bgStyleSelect.value;
+          canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+          canvas.renderAll();
+
+          // 実寸(mm)に対して十分な解像度で書き出す（およそ300dpi相当）
+          const multiplier = Math.max(2, 300 / 96);
+
+          const { jsPDF } = window.jspdf;
+          pdf = new jsPDF(isLandscape ? 'l' : 'p', 'mm', [paperPx.wMM, paperPx.hMM]);
+
+          for (let row = startRow; row <= endRow; row++) {
+            for (let col = startCol; col <= endCol; col++) {
+              const tileLeft = col * tileW - tileW / 2;
+              const tileTop = row * tileH - tileH / 2;
+
+              const hasContent = objectsAll.some(obj => {
+                const b = obj.getBoundingRect(true, true);
+                return b.left < tileLeft + tileW && b.left + b.width > tileLeft &&
+                       b.top < tileTop + tileH && b.top + b.height > tileTop;
+              });
+              if (!hasContent) continue; // 何も描かれていないページは作らない
+
+              const dataURL = canvas.toDataURL({
+                format: 'png',
+                left: tileLeft,
+                top: tileTop,
+                width: tileW,
+                height: tileH,
+                quality: 1.0,
+                multiplier: multiplier
+              });
+
+              if (pageAdded) pdf.addPage([paperPx.wMM, paperPx.hMM], isLandscape ? 'l' : 'p');
+              pdf.addImage(dataURL, 'PNG', 0, 0, paperPx.wMM, paperPx.hMM);
+              pageAdded = true;
+            }
+          }
+        } finally {
+          // 途中でエラーが起きた場合でも、キャンバスの表示状態は必ず元に戻す
+          canvas.setViewportTransform(currentVpt);
+          if (originMark) originMark.visible = true;
+          canvas.backgroundColor = originalBackground;
+          canvas.renderAll();
+        }
+
+        if (!pageAdded) return alert('保存する内容がありません。');
+        pdf.save(`memo_${new Date().toISOString().slice(0,10)}.pdf`);
+      } catch (err) {
+        console.error('PDF書き出しエラー（用紙サイズ分割）:', err);
+        alert('PDFの書き出し中にエラーが発生しました。\n\n' + (err && err.message ? err.message : err));
+      }
+    }
+
+    // 用紙サイズごとに分割するかどうかの確認モーダル
+    const pdfSplitModal = document.getElementById('pdf-split-modal');
+    const pdfSplitModalText = document.getElementById('pdf-split-modal-text');
+    let pendingPdfPaperKey = null;
+
+    function closePdfSplitModal() { pdfSplitModal.classList.remove('active'); pendingPdfPaperKey = null; }
+
+    document.getElementById('pdf-split-yes-btn').addEventListener('click', () => {
+      const key = pendingPdfPaperKey;
+      closePdfSplitModal();
+      exportPdfSplitByPaper(key);
+    });
+    document.getElementById('pdf-split-no-btn').addEventListener('click', () => {
+      closePdfSplitModal();
+      exportPdfFitToSinglePage();
+    });
+    document.getElementById('pdf-split-cancel-btn').addEventListener('click', closePdfSplitModal);
+    pdfSplitModal.addEventListener('click', (e) => { if (e.target === pdfSplitModal) closePdfSplitModal(); });
+
     document.getElementById('export-pdf-btn').addEventListener('click', () => {
-      const exportData = getExportDataURL();
-      if (!exportData) return alert('保存する内容がありません。');
-
-      const { jsPDF } = window.jspdf;
-      const isLandscape = exportData.width > exportData.height;
-      const pdf = new jsPDF(isLandscape ? 'l' : 'p', 'mm', 'a4');
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-
-      const margin = 10;
-      const maxW = pdfWidth - (margin * 2);
-      const maxH = pdfHeight - (margin * 2);
-
-      const ratio = Math.min(maxW / exportData.width, maxH / exportData.height);
-      const renderW = exportData.width * ratio;
-      const renderH = exportData.height * ratio;
-
-      const xPos = (pdfWidth - renderW) / 2;
-      const yPos = (pdfHeight - renderH) / 2;
-
-      pdf.addImage(exportData.dataURL, 'PNG', xPos, yPos, renderW, renderH);
-      pdf.save(`memo_${new Date().toISOString().slice(0,10)}.pdf`);
+      try {
+        const paperSizeKey = paperSizeSelect.value;
+        if (paperSizeKey) {
+          const label = paperSizeSelect.options[paperSizeSelect.selectedIndex].text;
+          pendingPdfPaperKey = paperSizeKey;
+          pdfSplitModalText.textContent = `用紙サイズ「${label}」ごとにページを分けて出力しますか？`;
+          pdfSplitModal.classList.add('active');
+          return;
+        }
+        exportPdfFitToSinglePage();
+      } catch (err) {
+        console.error('PDF書き出しエラー:', err);
+        alert('PDFの書き出し中にエラーが発生しました。\n\n' + (err && err.message ? err.message : err));
+      }
     });
 
     const helpModal = document.getElementById('help-modal');
     document.getElementById('help-btn').addEventListener('click', () => helpModal.classList.add('active'));
     document.getElementById('close-help-btn').addEventListener('click', () => helpModal.classList.remove('active'));
+    // ヘルプの中身（.modal-content）以外＝背景の暗い部分をタップ/クリックしたら閉じる。
+    // 以前は「閉じる」ボタンまでスクロールしないと閉じられず、誤って開いた時に手間だった。
+    helpModal.addEventListener('click', (e) => {
+      if (e.target === helpModal) helpModal.classList.remove('active');
+    });
 
     document.getElementById('reset-view-btn').addEventListener('click', () => {
       canvas.setViewportTransform([1, 0, 0, 1, window.innerWidth / 2, window.innerHeight / 2]);
@@ -2807,7 +3208,7 @@
     });
 
     document.getElementById('fit-content-btn').addEventListener('click', () => {
-      const objects = canvas.getObjects().filter(o => !o.isOriginMark);
+      const objects = canvas.getObjects().filter(o => !isGuideObject(o));
       if (objects.length === 0) return;
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       objects.forEach(obj => {
@@ -2857,7 +3258,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.125     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.137     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
