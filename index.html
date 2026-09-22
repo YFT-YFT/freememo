@@ -1568,6 +1568,25 @@
       linesToRemove.forEach(l => canvas.remove(l));
     });
 
+    // コネクタモードでは、要素を「押して別の要素までドラッグする」操作を
+    // 独自に処理したいが、Fabricは通常のmouse:downイベントを発火する
+    // “前”の時点（mouse:down:before）で、対象が selectable であれば
+    // 内部的にオブジェクトの移動用トランスフォームを準備してしまう。
+    // そのため、通常の mouse:down ハンドラ側で canvas.discardActiveObject()
+    // を呼んでも手遅れで、実際には図形そのものがドラッグで動いてしまい、
+    // 意図した「ドラッグして繋ぐ」ではなく「図形が移動する」動きになって
+    // いた。mouse:down:before の時点で対象の selectable を一時的にfalseに
+    // しておくことで、Fabric側の移動トランスフォーム準備そのものを
+    // 未然に防ぐ（実際の見た目・接続判定は通常の mouse:down 側で行う）。
+    canvas.on('mouse:down:before', function(opt) {
+      if (currentDrawMode !== 'connector') return;
+      const target = opt.target;
+      if (target && target.selectable && !isGuideObject(target) && !target.isLocked && !target.isConnectorLine) {
+        target.selectable = false;
+        target._connTempUnselectable = true;
+      }
+    });
+
     canvas.on('mouse:down', function(opt) {
       const evt = opt.e;
       const target = opt.target;
@@ -1653,6 +1672,14 @@
       }
 
       if (currentDrawMode === 'connector') {
+        // mouse:down:before で一時的に selectable を外していた場合、Fabric側の
+        // 判定は既にこの時点で完了しているので、ここで元に戻して問題ない
+        // （選択不可のままだと、コネクタモードを抜けた後も選択できなくなってしまう）。
+        if (target && target._connTempUnselectable) {
+          target.selectable = true;
+          delete target._connTempUnselectable;
+        }
+
         // 接続線自体をタップしても何もしない（選択して動かす操作は許可しない）
         if (target && target.isConnectorLine) return;
 
@@ -1663,7 +1690,7 @@
           return;
         }
 
-        // ドラッグでの移動が始まらないよう、Fabric標準の選択状態は使わない
+        // Fabric標準のアクティブ選択状態は使わない（前のモードの選択が残っている場合の保険）
         canvas.discardActiveObject();
 
         if (!pendingConnectorSource) {
@@ -1684,8 +1711,13 @@
         }
 
         // 2つ目の要素：1つ目との間に接続線を作成する
-        createConnectorLine(pendingConnectorSource, target);
+        // 色を元に戻すのを必ず createConnectorLine() より先に行う。
+        // createConnectorLine() は内部で saveState()（履歴保存）を呼ぶため、
+        // 先に接続線を作ってしまうと「まだオレンジ色のまま」の状態が
+        // 履歴に残ってしまい、後で元に戻す(undo)とオレンジ色のまま復活する
+        // 不具合になっていた。
         restoreConnectorSourceStyle(pendingConnectorSource);
+        createConnectorLine(pendingConnectorSource, target);
         pendingConnectorSource = null;
         canvas.renderAll();
         return;
@@ -1810,9 +1842,12 @@
       if (isConnectorDragging) {
         removeConnectorPreviewLine();
         if (connectorHoverTarget && pendingConnectorSource && connectorHoverTarget !== pendingConnectorSource) {
-          createConnectorLine(pendingConnectorSource, connectorHoverTarget);
+          // createConnectorLine() は内部で saveState() を呼ぶため、
+          // 履歴にオレンジ色の状態が残らないよう、必ず先に色を戻してから呼ぶ
+          // （詳細はタップ×2側の同様の処理のコメントを参照）。
           restoreConnectorSourceStyle(pendingConnectorSource);
           restoreConnectorSourceStyle(connectorHoverTarget);
+          createConnectorLine(pendingConnectorSource, connectorHoverTarget);
           pendingConnectorSource = null;
           connectorHoverTarget = null;
           canvas.renderAll();
@@ -3399,7 +3434,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.140     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.142     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
