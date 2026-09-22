@@ -709,6 +709,7 @@
           <li><b>図形として自動整形</b>: 標準ペンで直線・円・四角形・三角形・五角形などに近い形を描き、描き終わりの位置でペンを画面につけたまま約1秒保持してから離すと、自動できれいな図形に変換されます（判定に自信が持てない場合は手書きのまま残ります）。保持せずすぐ離した場合は図形化を試みないため、ひらがとなど手書き文字が誤って図形化されにくくなっています。多角形にしたい場合は、角にしたい場所で0.1〜0.2秒ほど止まりながら描くと認識しやすくなります。閉じきっていなくても「閉じようとしている」形であれば認識されます。</li>
           <li><b>キーボードで文字入力</b>: 画面上の入力したい場所を<b>ダブルクリック（またはダブルタップ）</b>すると、その場所に文字を入力できます。フォントやサイズ、文字色の変更も可能です。</li>
           <li><b>🎨 色選び</b>: 「色」の丸いボタンを押すと、よく使う8色をワンタップで選べるパレットが開きます（選ぶと即座に閉じます）。パレットにない色が欲しいときは「🎨 もっと見る…」から、これまで通りの詳細なカラーピッカーを開けます。</li>
+          <li><b>選択中の図形の色を変える</b>: 手書き線・図形・コネクタ線などを選択した状態で「ペンの色」を選ぶと、これから描く線の色だけでなく、選択中の図形自体の色もその場で変わります（文字の色は「文字色」ピッカーで個別に変更してください）。選択すると、ペンの色スウォッチはその図形の現在の色に自動で切り替わります。</li>
         </ul>
       </div>
 
@@ -1201,7 +1202,7 @@
     let longPressStartPos = null;
     let pendingLongPressAction = null;
     const LONG_PRESS_MS = 700;
-    const LONG_PRESS_MOVE_TOLERANCE = 10;
+    const LONG_PRESS_MOVE_TOLERANCE = 15; // 0.7秒の保持中に生じる自然な手ブレで誤キャンセルしないよう、10→15pxに緩和
 
     // --- ロックアイコン ---
     // 長押しでオブジェクトを選択した際、その近くに🔒（固定する）/🔓（固定解除する）
@@ -1942,6 +1943,15 @@
         textColorInput.value = activeObject.fill || '#222222';
         textColorInput.updateSwatch && textColorInput.updateSwatch();
         fontSizeInput.value = activeObject.fontSize || 22;
+      } else if (activeObject && !isGuideObject(activeObject) && activeObject.type !== 'image') {
+        // 図形・手書き線・コネクタ線などを選択したときは、「ペンの色」スウォッチを
+        // その図形の現在の色に合わせておく（テキスト選択時の文字色同期と同様）。
+        // strokeが単純な#rrggbb形式でない（rgba等）場合は<input type="color">に
+        // 設定できないため、その場合は変更しない。
+        if (typeof activeObject.stroke === 'string' && /^#[0-9a-f]{6}$/i.test(activeObject.stroke)) {
+          penColorInput.value = activeObject.stroke;
+          penColorInput.updateSwatch && penColorInput.updateSwatch();
+        }
       }
       updateDeleteButtonState();
       updateSelectModeIndicator();
@@ -2361,7 +2371,33 @@
     setupColorPicker(penColorInput, document.getElementById('pen-color-swatch'), document.getElementById('pen-color-popup'));
     setupColorPicker(textColorInput, document.getElementById('text-color-swatch'), document.getElementById('text-color-popup'));
 
-    penColorInput.addEventListener('input', () => { applyBrushSettings(); saveState(); });
+    penColorInput.addEventListener('input', () => {
+      applyBrushSettings();
+
+      // 図形・手書き線・コネクタ線などが選択中であれば、その色もここで
+      // 変更する（以前は「これから描く線の色」にしか反映されず、選択中の
+      // 図形の色は変えられなかった）。文字は「文字色」ピッカー側で個別に
+      // 扱うため、画像は色の概念が無い（枠線を意図せず付けてしまう）ため、
+      // どちらもここでは対象外にする。
+      const activeObject = canvas.getActiveObject();
+      if (activeObject) {
+        // 複数選択(activeSelection)の場合は中身のオブジェクトそれぞれに適用する
+        const targets = activeObject._objects ? activeObject._objects : [activeObject];
+        let changed = false;
+        targets.forEach(obj => {
+          if (isGuideObject(obj) || obj.type === 'i-text' || obj.type === 'image') return;
+          obj.set('stroke', penColorInput.value);
+          // 塗りつぶしがある図形（透明でない）は塗りの色も合わせて変える
+          if (obj.fill && obj.fill !== 'transparent') {
+            obj.set('fill', penColorInput.value);
+          }
+          changed = true;
+        });
+        if (changed) canvas.renderAll();
+      }
+
+      saveState();
+    });
     penWidthInput.addEventListener('input', (e) => {
       penWidthVal.textContent = `${e.target.value}px`;
       applyBrushSettings();
@@ -2947,7 +2983,23 @@
     const SHAPE_CONFIRM_HOLD_MS = 550; // 図形化の確定とみなす保持時間（約0.55秒。1秒は長すぎるとの声を受けて短縮）
 
     canvas.on('path:created', (e) => {
-      if (e.path.width <= 2 && e.path.height <= 2) { canvas.remove(e.path); canvas.renderAll(); return; }
+      // 長押し（画像・図形を固定/固定解除するための選択）が成立していた場合、
+      // Fabricは指を置いた場所からその一瞬のブレの分だけ、意図しない
+      // 微小なストロークを自動的に描いてしまう。以前は「幅・高さが2px以下」
+      // という厳しい基準でしか除去していなかったため、指の自然なブレ
+      // （長押し判定の許容量である10px以内には収まるが2pxは超える）で
+      // 残ってしまうことがあった。この残骸が対象オブジェクトのすぐ上に
+      // 乗ったままになると、次に同じ場所を長押しした際に
+      // canvas.findTarget がその残骸を拾ってしまい、「ロックアイコンが
+      // 出ない」「固定を解除しようと長押ししても反応しない」不具合の
+      // 原因になっていた。長押しが成立していた場合は、多少の余裕を見て
+      // 無条件にストロークを破棄する（＝この場合は図形化なども一切試みない）。
+      const isLongPressArtifact = !!pendingLongPressAction && e.path.width <= 30 && e.path.height <= 30;
+      if (isLongPressArtifact || (e.path.width <= 2 && e.path.height <= 2)) {
+        canvas.remove(e.path);
+        canvas.renderAll();
+        return;
+      }
       lastHandwritingBounds = { left: e.path.left, top: e.path.top + e.path.height + 15 };
 
       // 図形化は「ストロークの終点でおよそ0.55秒ペンを保持していたか」だけを条件にする。
@@ -3434,7 +3486,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.142     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.144     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
