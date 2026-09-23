@@ -975,6 +975,20 @@
       return !!(obj && (obj.isOriginMark || obj.isConnectorPreviewLine || obj.isLockBadge));
     }
 
+    // ダブルタップ/ダブルクリックで「テキストモードに入るのを諦めて
+    // 既存要素の選択・編集に譲るべきか」を判定する。
+    // テキスト(i-text)は、ダブルタップ自体が既に「編集モードに入る」
+    // という別の役目を持っている（1175行目付近のクリック回数判定を参照）ため、
+    // ここでテキスト新規作成に割り込むと競合してしまう。
+    // 画像・手書き線・変換後の図形(line/ellipse/rect/polygon)には
+    // ダブルタップに割り当てられた機能が無いため、その上でも
+    // 新規テキストボックスを作成してよい（画像を素早く選択する手段は
+    // 長押し／選択モード／Ctrlクリックに統一）。
+    function blocksDoubleTapTextCreation(target) {
+      if (!target || isGuideObject(target)) return false;
+      return target.type === 'i-text';
+    }
+
     // 背景に敷き詰めるタイル画像を1枚生成する。
     // ・細かい方眼は常に破線で描く（1マス=GRID_SIZE px、およそ1cm相当）。
     // ・用紙サイズが選択されている場合は、そのサイズちょうどをタイル1枚の
@@ -1174,7 +1188,7 @@
 
       const willSelect = target && !isGuideObject(target) && !target.isLocked && (
         canvas.getActiveObject() === target || // 既に選択中のオブジェクトへの単純クリック＆ドラッグは常に「移動」として扱う
-        ((target.type === 'i-text' || target.type === 'image') && clickCount >= 2)
+        (target.type === 'i-text' && clickCount >= 2)
       );
 
       canvas.isDrawingMode = !willSelect && (currentDrawMode === 'pen' || currentDrawMode === 'highlighter');
@@ -1801,7 +1815,7 @@
       // クリック回数のカウントは precomputeInteractionMode 側で既に行っているため、
       // ここでは結果(clickCount / lastTarget)を使って実際の選択処理のみ行う。
       // 手書き線(path)の3回連打による選択は廃止（長押し等に統一）。
-      if (target && !isGuideObject(target) && !target.isLocked && (target.type === 'i-text' || target.type === 'image') && clickCount >= 2) {
+      if (target && !isGuideObject(target) && !target.isLocked && target.type === 'i-text' && clickCount >= 2) {
         canvas.setActiveObject(target);
         if (target.type === 'i-text') {
           target.enterEditing();
@@ -3086,7 +3100,7 @@
       // 発火しない、または native のズーム/移動ジェスチャーに化けることがあり、
       // タッチ操作をこの一本に頼るのは不安定だったため。
       if (options.e && options.e.pointerType === 'touch') return;
-      if (options.target && !isGuideObject(options.target)) return;
+      if (blocksDoubleTapTextCreation(options.target)) return;
       if (exitSelectModeIfActive()) return;
       const pointer = canvas.getPointer(options.e);
       createNewTextBox(pointer.x, pointer.y);
@@ -3127,7 +3141,7 @@
         lastTapTime = 0;
         lastTapPos = null;
         const target = canvas.findTarget(e, false);
-        if (target && !isGuideObject(target)) return; // 既存要素の上は無視（選択/編集操作に譲る）
+        if (blocksDoubleTapTextCreation(target)) return; // 画像・テキストの上だけは選択/編集操作に譲る
         if (e.cancelable) e.preventDefault(); // ネイティブのズーム等を確実に打ち消す
         if (exitSelectModeIfActive()) return;
         const pointer = canvas.getPointer(e);
@@ -3541,7 +3555,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.145     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.147     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
