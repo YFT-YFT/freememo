@@ -717,7 +717,7 @@
         <h4>👆 オブジェクトの選択・移動・削除</h4>
         <ul>
           <li><b>選択モードボタン</b>: メニューの「👆 選択」を押すとON。ONの間は1回のタップ/クリックだけで手書き線・文字・画像を選択でき、そのままドラッグで移動できます。もう一度押すか、何もない場所をダブルタップ/ダブルクリックすると描画モードに戻ります。</li>
-          <li><b>固定（ロック）</b>: 長押しで要素を選択すると、その近くに🔒マークが表示されます。タップすると、その要素だけ移動・選択ができないよう固定されます（半透明で表示）。固定された要素を再び長押しすると、今度は🔓マークが表示され、タップで固定解除できます。取り込んだ画像などを誤って動かしたくないときに便利です。</li>
+          <li><b>固定（ロック）</b>: 長押しで要素を選択すると、その近くに🔒マークが表示されます。タップすると、その要素だけ移動・選択ができないよう固定され、固定中は左上に小さな🔒バッジが常に表示されます（画像や図形への書き込みが見づらくならないよう、不透明度は変えません）。固定された要素を再び長押しすると、今度は🔓マークが表示され、タップで固定解除できます。取り込んだ画像などを誤って動かしたくないときに便利です。選択モード中でも長押しで固定・固定解除できます。</li>
           <li><b>長押し（約0.7秒）</b>: キーボードがない端末でも、選択したい対象を指で押さえたまま少し待つと選択できます（対応端末では振動でお知らせします）。指を離した後、改めてドラッグすると移動できます。</li>
           <li><b>Ctrl（Macは⌘）+ クリック/ドラッグ</b>: パソコンで、押している間だけ選択モードとして扱われます。</li>
           <li><b>削除</b>: 選択した状態で「🗑️」ボタン、またはキーボードの Delete / Backspace で削除できます。</li>
@@ -967,12 +967,12 @@
 
     let lastHandwritingBounds = null;
 
-    // 背景の「原点マーク」や、コネクタのドラッグ中プレビュー線など、
-    // 実際の描画内容ではない一時的・装飾的なオブジェクトかどうかを
+    // 背景の「原点マーク」や、コネクタのドラッグ中プレビュー線、固定(ロック)
+    // バッジなど、実際の描画内容ではない一時的・装飾的なオブジェクトかどうかを
     // 判定する共通ヘルパー。選択・エクスポート・削除などの対象から
     // 一律で除外するために使う。
     function isGuideObject(obj) {
-      return !!(obj && (obj.isOriginMark || obj.isConnectorPreviewLine));
+      return !!(obj && (obj.isOriginMark || obj.isConnectorPreviewLine || obj.isLockBadge));
     }
 
     // 背景に敷き詰めるタイル画像を1枚生成する。
@@ -1204,6 +1204,46 @@
     const LONG_PRESS_MS = 700;
     const LONG_PRESS_MOVE_TOLERANCE = 15; // 0.7秒の保持中に生じる自然な手ブレで誤キャンセルしないよう、10→15pxに緩和
 
+    // --- 固定(ロック)バッジ ---
+    // 「固定中はオブジェクトを薄くする」だけだと、画像や図形に書き込んで
+    // 説明するときに見づらくなってしまう。そこで、不透明度は変えずに、
+    // 固定中は常に小さな🔒バッジを左上に表示し続けることで固定状態を
+    // 示す（このバッジ自体は選択・編集・書き出しの対象にはならない）。
+    // ロック対象は原則として動かせない(selectable=false)ため、バッジの
+    // 位置はロック時に1回決めれば、解除されるまでずれることはない。
+    function createLockBadge(obj) {
+      const bounds = obj.getBoundingRect(true, true);
+      const badge = new fabric.Text('🔒', {
+        left: bounds.left,
+        top: bounds.top,
+        fontSize: 18,
+        originX: 'center',
+        originY: 'center',
+        selectable: false,
+        evented: false,
+        isLockBadge: true
+      });
+      canvas.add(badge);
+      canvas.bringToFront(badge);
+      obj._lockBadge = badge;
+    }
+
+    function removeLockBadge(obj) {
+      if (obj && obj._lockBadge) {
+        canvas.remove(obj._lockBadge);
+        delete obj._lockBadge;
+      }
+    }
+
+    // ページ読み込み・元に戻す/やり直し等でキャンバスの中身が丸ごと
+    // 差し替わった直後に呼ぶ。バッジ自体は保存対象にしていないため、
+    // isLocked:true なオブジェクトを元に毎回作り直す。
+    function refreshAllLockBadges() {
+      canvas.getObjects().slice().forEach(o => { if (o.isLockBadge) canvas.remove(o); });
+      canvas.getObjects().slice().forEach(obj => { if (obj.isLocked) createLockBadge(obj); });
+      canvas.renderAll();
+    }
+
     // --- ロックアイコン ---
     // 長押しでオブジェクトを選択した際、その近くに🔒（固定する）/🔓（固定解除する）
     // アイコンを一時的に表示する。タップすると固定状態がトグルされる。
@@ -1251,7 +1291,12 @@
     }
 
     function startLongPressWatch(e) {
-      if (currentDrawMode === 'eraser' || isPanLockMode || isSelectMode) return;
+      // 以前は選択モード(isSelectMode)中は長押し自体を丸ごと無効化していたが、
+      // それだと「選択モードに切り替えると固定(ロック)アイコンが一切出せない」
+      // ことになってしまっていた。選択モードは通常のFabric選択（タップで即選択）を
+      // 有効にするためのモードであり、長押しでのロックアイコン表示とは
+      // 独立した操作なので、選択モード中も長押しは有効にする。
+      if (currentDrawMode === 'eraser' || isPanLockMode) return;
       if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 2) return;
       const touch = e.touches && e.touches[0];
       const x = touch ? touch.clientX : e.clientX;
@@ -1556,13 +1601,19 @@
     canvas.on('object:scaling', handleConnectorTransformUpdate);
     canvas.on('object:rotating', handleConnectorTransformUpdate);
 
-    // 要素が削除されたら、それにつながっていた接続線も一緒に削除する
-    // （宙に浮いた接続線が残ってしまうのを防ぐ）。ここを削除処理の
+    // 要素が削除されたら、それにつながっていた接続線や、固定(ロック)バッジも
+    // 一緒に削除する（宙に浮いたままにならないようにする）。ここを削除処理の
     // 一箇所に集約することで、消しゴム／選択削除／複数削除など
     // どの削除経路からでも漏れなく後始末できる。
     canvas.on('object:removed', function(opt) {
       const obj = opt.target;
-      if (!obj || obj.isConnectorLine || !obj.connId) return;
+      if (!obj) return;
+      if (obj.isLockBadge) return; // バッジ自身の削除では何もしない
+      if (obj._lockBadge) {
+        canvas.remove(obj._lockBadge);
+        delete obj._lockBadge;
+      }
+      if (obj.isConnectorLine || !obj.connId) return;
       const linesToRemove = canvas.getObjects().filter(o =>
         o.isConnectorLine && (o.connFromId === obj.connId || o.connToId === obj.connId)
       );
@@ -1629,23 +1680,24 @@
       // 対象オブジェクトの固定/固定解除をトグルする。固定中は selectable=false にして
       // 「選択モードでも間違って動かない／そもそも選択されない」を実現しつつ、
       // evented は true のままにして、再度ロングプレスで解除できるようにする。
+      // 以前は固定中に不透明度を下げていたが、画像や図形に書き込んで説明する際に
+      // 見づらくなるとの声があったため、不透明度はそのままにし、代わりに
+      // 常時表示の小さな🔒バッジ（左上）で固定中であることを示す方式にした。
       if (target && target === activeLockIcon) {
         const obj = target.lockIconFor;
         if (obj) {
           if (obj.isLocked) {
             obj.set({
               selectable: true,
-              opacity: (typeof obj._preLockOpacity === 'number') ? obj._preLockOpacity : 1,
               isLocked: false
             });
-            delete obj._preLockOpacity;
+            removeLockBadge(obj);
           } else {
-            obj._preLockOpacity = (typeof obj.opacity === 'number') ? obj.opacity : 1;
             obj.set({
               selectable: false,
-              opacity: Math.min(obj._preLockOpacity, 0.5),
               isLocked: true
             });
+            createLockBadge(obj);
             canvas.discardActiveObject();
           }
           updateDeleteButtonState();
@@ -2130,7 +2182,7 @@
       if (historyStep < history.length - 1) history = history.slice(0, historyStep + 1);
 
       const json = JSON.stringify(canvas.toJSON([
-        'isOriginMark', 'isLocked', '_preLockOpacity', 'selectable',
+        'isOriginMark', 'isLocked', 'selectable',
         'connId', 'isConnectorLine', 'connFromId', 'connToId', 'arrowType'
       ]));
       history.push(json);
@@ -2159,6 +2211,7 @@
         canvas.loadFromJSON(history[historyStep], () => {
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
+          refreshAllLockBadges();
           refreshAllConnectorLines(); // 旧バージョンの中心接続の線も、図形の縁基準の位置に補正する
           canvas.renderAll();
           updateHistoryButtons();
@@ -2177,6 +2230,7 @@
         canvas.loadFromJSON(history[historyStep], () => {
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
+          refreshAllLockBadges();
           refreshAllConnectorLines();
           canvas.renderAll();
           updateHistoryButtons();
@@ -2206,6 +2260,7 @@
         canvas.loadFromJSON(pageJson, () => {
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
+          refreshAllLockBadges();
           refreshAllConnectorLines();
           canvas.renderAll();
           history = [pageJson];
@@ -3486,7 +3541,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.144     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.145     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
