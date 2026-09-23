@@ -444,6 +444,13 @@
     .toggle-btn { background: #e9ecef; color: #333; border: 1px solid #ccc; }
     .toggle-btn.active { background: #007bff; color: white; border-color: #0056b3; }
 
+    /* 「挿入」ボタンはトグル（ON/OFF）ではない普通の操作ボタンだが、
+       他のボタンと同じ基本スタイル(button, .file-label)を使っていたため
+       既定色が青になり、隣に並ぶトグルボタン群（ペン・選択・コネクタ等）の
+       「ON状態」と紛らわしく見えていた。トグルではないことが伝わるよう、
+       非アクティブなトグルボタンと同じ色に揃える。 */
+    .file-label { background: #e9ecef; color: #333; border: 1px solid #ccc; }
+
     .history-btn { background: #6c757d; }
     .history-btn:disabled { background: #ced4da; cursor: not-allowed; opacity: 0.6; }
 
@@ -553,7 +560,20 @@
       <div class="tool-group">
         <button id="pen-mode-btn" class="toggle-btn active" title="標準ペン">✏️</button>
         <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️</button>
-        <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（なぞった部分の要素を消します）">🧹</button>
+        <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（なぞった部分の要素を消します）">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <defs>
+              <clipPath id="eraserBodyClip">
+                <rect x="3" y="7" width="18" height="10" rx="2.5"></rect>
+              </clipPath>
+            </defs>
+            <g transform="rotate(-20 12 12)">
+              <rect x="3" y="7" width="18" height="10" rx="2.5" fill="#f8a5c2"></rect>
+              <rect x="3" y="13" width="18" height="4" fill="#ffffff" clip-path="url(#eraserBodyClip)"></rect>
+              <rect x="3" y="7" width="18" height="10" rx="2.5" fill="none" stroke="#c2185b" stroke-width="1.2"></rect>
+            </g>
+          </svg>
+        </button>
         <button id="select-mode-btn" class="toggle-btn" title="選択モード（ONの間、1回のタップ/クリックでオブジェクトを選択・移動できます）">👆 選択</button>
         <div class="tool-item" style="position:relative;">
           <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップ、または1つ目を押したまま2つ目までドラッグして繋ぐと線で接続します。接続された要素は動かしても線が繋がったままになります。押すとON、もう一度押すとOFFになります）">🔗 コネクタ <span id="connector-type-indicator">―</span></button>
@@ -1414,6 +1434,15 @@
     //   JSONシリアライズができないため）。
     // ============================================================
 
+    // コネクタの接続元/接続先として使えない「固定中」状態かどうかを判定する。
+    // 固定(ロック)は本来「誤って動かしたくない」ための機能であり、コネクタで
+    // 繋ぐ操作は対象オブジェクトの位置や見た目を一切変更しない（線側が
+    // 追従するだけ）。「動かないようにする」ことと「繋げない」ことの間に
+    // 必然的な関係はないため、種類を問わず固定中でもコネクタの対象にできる。
+    function isConnectorLockBlocked(obj) {
+      return false;
+    }
+
     function restoreConnectorSourceStyle(obj) {
       if (!obj) return;
       obj.set({ stroke: (obj._connOrigStroke !== undefined ? obj._connOrigStroke : null) });
@@ -1752,7 +1781,7 @@
 
         // 何もない場所／原点マーク／固定中の要素をタップした場合は、
         // 選択待ちだった1つ目の要素があればキャンセルするだけにする
-        if (!target || isGuideObject(target) || target.isLocked) {
+        if (!target || isGuideObject(target) || isConnectorLockBlocked(target)) {
           cancelPendingConnectorSelection();
           return;
         }
@@ -1861,7 +1890,7 @@
       if (isConnectorDragging && currentDrawMode === 'connector' && pendingConnectorSource) {
         const hoverCandidate = canvas.findTarget(evt, false);
         const isValidCandidate = hoverCandidate && hoverCandidate !== pendingConnectorSource &&
-          !isGuideObject(hoverCandidate) && !hoverCandidate.isLocked && !hoverCandidate.isConnectorLine;
+          !isGuideObject(hoverCandidate) && !isConnectorLockBlocked(hoverCandidate) && !hoverCandidate.isConnectorLine;
 
         if (isValidCandidate) {
           if (connectorHoverTarget !== hoverCandidate) {
@@ -2127,7 +2156,15 @@
     // オブジェクトの選択・移動ができる。もう一度ボタンを押すか、
     // 何もない場所をダブルタップ/ダブルクリックすると描画モードに戻る。
     selectModeBtn.addEventListener('click', () => {
-      isSelectMode = !isSelectMode;
+      const turningOn = !isSelectMode;
+      // コネクタモード中に選択モードをONにすると、currentDrawMode が
+      // 'connector' のまま残ってしまい、タップしたつもりが接続操作として
+      // 扱われる不具合があった。選択モードは「タップで選択・移動する」ための
+      // ものなので、ONにする際は明示的にコネクタ（に限らずペン以外のツール）を解除する。
+      if (turningOn && currentDrawMode === 'connector') {
+        setDrawMode('pen');
+      }
+      isSelectMode = turningOn;
       if (isSelectMode && isPanLockMode) {
         // 画面移動固定とは意味が競合するため、選択モードON時はOFFにする
         isPanLockMode = false;
@@ -3555,7 +3592,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.147     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.149     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
