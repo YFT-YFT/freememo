@@ -1393,6 +1393,27 @@
       longPressStartPos = null;
     }
 
+    // 通常のper-pixel当たり判定（canvas.findTarget）は、図形の縁（細い描線）
+    // ぎりぎりを長押しした場合に取りこぼすことがある（アンチエイリアスの影響等で、
+    // 境界のピクセルが「透明」と判定されてしまうため）。ラベル付き図形
+    // （groupIdを持つ図形）については、内側は既に極薄の塗りで対応済みだが、
+    // 縁については、バウンディングボックス内であれば拾えるようフォールバックする。
+    function findLongPressTarget(e) {
+      const target = canvas.findTarget(e, false);
+      if (target && !isGuideObject(target)) return target;
+      const pointer = canvas.getPointer(e);
+      const candidates = canvas.getObjects().filter(o => o.groupId && !isGuideObject(o) &&
+        (o.type === 'rect' || o.type === 'ellipse' || o.type === 'polygon' || o.type === 'line'));
+      for (const o of candidates) {
+        const b = o.getBoundingRect(true, true);
+        if (pointer.x >= b.left && pointer.x <= b.left + b.width &&
+            pointer.y >= b.top && pointer.y <= b.top + b.height) {
+          return o;
+        }
+      }
+      return target;
+    }
+
     function startLongPressWatch(e) {
       // 以前は選択モード(isSelectMode)中は長押し自体を丸ごと無効化していたが、
       // それだと「選択モードに切り替えると固定(ロック)アイコンが一切出せない」
@@ -1407,7 +1428,7 @@
       longPressStartPos = { x, y };
       longPressTimer = setTimeout(() => {
         if (!longPressStartPos) return;
-        const target = canvas.findTarget(e, false);
+        const target = findLongPressTarget(e);
         // 固定済みのオブジェクトも対象に含める（固定解除のためにロックアイコンを
         // 表示する必要があるため）。実際に選択状態にする(setActiveObject)かどうかは
         // mouse:up側で isLocked を見て判断する。
@@ -3912,7 +3933,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.158     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.159     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
