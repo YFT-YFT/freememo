@@ -427,6 +427,7 @@
       .fit-btn:hover { background: #1baa80; }
       .pdf-btn:hover { background: #593196; }
       button.delete-btn:hover { background: #e8590c; }
+      button.group-btn:hover { background: #59339d; }
       button.clear-btn:hover { background: #a71d2a; }
     }
     
@@ -462,6 +463,11 @@
 
     button.delete-btn { background: #fd7e14; }
     button.delete-btn:disabled { background: #ced4da; cursor: not-allowed; opacity: 0.6; }
+
+    /* グループ化/グループ解除ボタン。削除(オレンジ)と紛らわしくならないよう
+       独自の紫系の色にする。 */
+    button.group-btn { background: #6f42c1; }
+    button.group-btn:disabled { background: #ced4da; cursor: not-allowed; opacity: 0.6; }
 
     button.clear-btn { background: #dc3545; }
 
@@ -704,6 +710,8 @@
        画面外（切り取られた状態）に隠れてしまうため、意図的に兄弟要素にしている。 -->
   <div class="btn-fixed-right">
     <button id="delete-selected-btn" class="delete-btn" disabled title="選択オブジェクトを削除">🗑️</button>
+    <button id="group-btn" class="group-btn" disabled title="選択した複数のオブジェクトをグループ化（以後まとめて選択・移動できます）">🧩</button>
+    <button id="ungroup-btn" class="group-btn" disabled title="グループ化を解除">✂️</button>
     <button id="reset-view-btn" class="center-btn" title="初期位置（中央）へ戻す">🎯</button>
     <button id="fit-content-btn" class="fit-btn" title="全描画を画面に収める">🔍</button>
     <button id="undo-btn" class="history-btn" disabled title="元に戻す (Ctrl+Z)">↩️</button>
@@ -727,7 +735,7 @@
         <ul>
           <li><b>手書き（ペン・マーカー）</b>: 画面上をドラッグ（指やペンでなぞる）すると、いつでも自由に手書きができます。上部メニューで線の「色」や「太さ」を自由に調整できます。</li>
           <li><b>図形として自動整形</b>: 標準ペンで直線・円・四角形・三角形・五角形などに近い形を描き、描き終わりの位置でペンを画面につけたまま約1秒保持してから離すと、自動できれいな図形に変換されます（判定に自信が持てない場合は手書きのまま残ります）。保持せずすぐ離した場合は図形化を試みないため、ひらがとなど手書き文字が誤って図形化されにくくなっています。多角形にしたい場合は、角にしたい場所で0.1〜0.2秒ほど止まりながら描くと認識しやすくなります。閉じきっていなくても「閉じようとしている」形であれば認識されます。</li>
-          <li><b>キーボードで文字入力</b>: 画面上の入力したい場所を<b>ダブルクリック（またはダブルタップ）</b>すると、その場所に文字を入力できます。フォントやサイズ、文字色の変更も可能です。</li>
+          <li><b>キーボードで文字入力</b>: 画面上の入力したい場所を<b>ダブルクリック（またはダブルタップ）</b>すると、その場所に文字を入力できます。フォントやサイズ、文字色の変更も可能です。図形（手書きの線・変換後の四角/丸など）の真上でダブルタップした場合は、図形の中央に文字が入り、その図形と自動的にグループ化されるので、以後は図形を動かすと文字も一緒に付いてきます。</li>
           <li><b>🎨 色選び</b>: 「色」の丸いボタンを押すと、よく使う8色をワンタップで選べるパレットが開きます（選ぶと即座に閉じます）。パレットにない色が欲しいときは「🎨 もっと見る…」から、これまで通りの詳細なカラーピッカーを開けます。</li>
           <li><b>選択中の図形の色を変える</b>: 手書き線・図形・コネクタ線などを選択した状態で「ペンの色」を選ぶと、これから描く線の色だけでなく、選択中の図形自体の色もその場で変わります（文字の色は「文字色」ピッカーで個別に変更してください）。選択すると、ペンの色スウォッチはその図形の現在の色に自動で切り替わります。</li>
         </ul>
@@ -737,6 +745,7 @@
         <h4>👆 オブジェクトの選択・移動・削除</h4>
         <ul>
           <li><b>選択モードボタン</b>: メニューの「👆 選択」を押すとON。ONの間は1回のタップ/クリックだけで手書き線・文字・画像を選択でき、そのままドラッグで移動できます。もう一度押すか、何もない場所をダブルタップ/ダブルクリックすると描画モードに戻ります。</li>
+          <li><b>グループ化</b>: 選択モードで何もない場所からドラッグして複数のオブジェクトをまとめて選択し、右側の🧩ボタンを押すとグループ化されます。以後はグループ内のどれか1つをタップするだけで全員がまとめて選択され、一緒に移動できます。✂️ボタンでグループ解除できます。</li>
           <li><b>固定（ロック）</b>: 長押しで要素を選択すると、その近くに🔒マークが表示されます。タップすると、その要素だけ移動・選択ができないよう固定され、固定中は左上に小さな🔒バッジが常に表示されます（画像や図形への書き込みが見づらくならないよう、不透明度は変えません）。固定された要素を再び長押しすると、今度は🔓マークが表示され、タップで固定解除できます。取り込んだ画像などを誤って動かしたくないときに便利です。選択モード中でも長押しで固定・固定解除できます。</li>
           <li><b>長押し（約0.7秒）</b>: キーボードがない端末でも、選択したい対象を指で押さえたまま少し待つと選択できます（対応端末では振動でお知らせします）。指を離した後、改めてドラッグすると移動できます。</li>
           <li><b>Ctrl（Macは⌘）+ クリック/ドラッグ</b>: パソコンで、押している間だけ選択モードとして扱われます。</li>
@@ -1193,8 +1202,11 @@
       }
 
       // クリック/タップ位置に既存オブジェクトがあるかを事前判定し、
-      // 連続クリック（テキストや画像への2回連打＝編集を開く）のときは
+      // 連続クリック（テキストへの2回連打＝編集を開く）のときは
       // Fabricが描画を開始する前に isDrawingMode を切っておく。
+      // 以前は画像も対象に含めていたが、画像はダブルタップで新規テキストを
+      // 作成できるようにしたため、ここでの対象からは外している
+      // （画像の選択は長押し／選択モードボタン／Ctrlクリックで行う）。
       // 手書き線(path)の選択は、以前はここで3回連打を要求していたが、
       // タイミングがシビアで不安定なため廃止し、長押し／選択モードボタン／
       // Ctrlクリックに一本化した。
@@ -1262,9 +1274,40 @@
       obj._lockBadge = badge;
     }
 
+    // グループ化された複数オブジェクト（図形＋ラベル文字など）用に、
+    // バッジを1個だけ・全員を囲む範囲の左上に表示する。
+    // メンバーそれぞれに別々のバッジを付けると、狭い範囲に小さなバッジが
+    // 重なって見づらく、「ロックされているように見えない」原因になっていたため。
+    function createLockBadgeForGroup(members) {
+      let boundsLeft = Infinity, boundsTop = Infinity;
+      members.forEach(o => {
+        const b = o.getBoundingRect(true, true);
+        boundsLeft = Math.min(boundsLeft, b.left);
+        boundsTop = Math.min(boundsTop, b.top);
+      });
+      const badge = new fabric.Text('🔒', {
+        left: boundsLeft,
+        top: boundsTop,
+        fontSize: 18,
+        originX: 'center',
+        originY: 'center',
+        selectable: false,
+        evented: false,
+        isLockBadge: true
+      });
+      canvas.add(badge);
+      canvas.bringToFront(badge);
+      // 全員が同じバッジ参照を共有する（削除時はどのメンバーから呼んでも
+      // 消せるようにするため）。
+      members.forEach(o => { o._lockBadge = badge; });
+    }
+
     function removeLockBadge(obj) {
       if (obj && obj._lockBadge) {
-        canvas.remove(obj._lockBadge);
+        const badge = obj._lockBadge;
+        // グループの場合、複数メンバーが同じバッジ参照を共有しているため、
+        // 既に他メンバーの削除で消え済みのことがある。存在確認してから消す。
+        if (canvas.getObjects().indexOf(badge) !== -1) canvas.remove(badge);
         delete obj._lockBadge;
       }
     }
@@ -1274,7 +1317,20 @@
     // isLocked:true なオブジェクトを元に毎回作り直す。
     function refreshAllLockBadges() {
       canvas.getObjects().slice().forEach(o => { if (o.isLockBadge) canvas.remove(o); });
-      canvas.getObjects().slice().forEach(obj => { if (obj.isLocked) createLockBadge(obj); });
+      const handledGids = new Set();
+      canvas.getObjects().slice().forEach(obj => {
+        if (!obj.isLocked) return;
+        if (obj.groupId) {
+          if (handledGids.has(obj.groupId)) return; // 同じグループは1回だけ処理する
+          const members = canvas.getObjects().filter(o => o.groupId === obj.groupId && o.isLocked);
+          if (members.length > 1) {
+            handledGids.add(obj.groupId);
+            createLockBadgeForGroup(members);
+            return;
+          }
+        }
+        createLockBadge(obj);
+      });
       canvas.renderAll();
     }
 
@@ -1297,12 +1353,25 @@
     function showLockIconFor(target) {
       removeLockIcon();
       if (!target || isGuideObject(target)) return;
-      const bounds = target.getBoundingRect(true, true); // キャンバス座標系での境界
+      // グループ化されている場合は、ラベル文字などの当たった1個だけでなく
+      // グループ全員を囲む範囲を基準にアイコンを配置する（ロック操作自体が
+      // グループ全員に及ぶため、位置もそれに合わせる）。
+      const members = target.groupId
+        ? canvas.getObjects().filter(o => o.groupId === target.groupId)
+        : [target];
+      let boundsLeft = Infinity, boundsTop = Infinity, boundsRight = -Infinity, boundsBottom = -Infinity;
+      members.forEach(o => {
+        const b = o.getBoundingRect(true, true);
+        boundsLeft = Math.min(boundsLeft, b.left);
+        boundsTop = Math.min(boundsTop, b.top);
+        boundsRight = Math.max(boundsRight, b.left + b.width);
+        boundsBottom = Math.max(boundsBottom, b.top + b.height);
+      });
       const icon = new fabric.Text(target.isLocked ? '🔓' : '🔒', {
         // 対象オブジェクトの当たり判定（targetFindTolerance）と重ならないよう、
         // 十分な余白（20px）を取って配置する
-        left: bounds.left + bounds.width + 20,
-        top: bounds.top - 14,
+        left: boundsRight + 20,
+        top: boundsTop - 14,
         fontSize: 26,
         selectable: false,
         evented: true,
@@ -1644,6 +1713,46 @@
     canvas.on('object:scaling', handleConnectorTransformUpdate);
     canvas.on('object:rotating', handleConnectorTransformUpdate);
 
+    // --- グループ(groupId)のメンバー追従 ---
+    // 当初は「グループの1つを選択したら自動でActiveSelection全体に
+    // 差し替える」方式（onSelection内のexpandToFullGroupIfNeeded）だけで
+    // 追従させようとしていたが、タップとドラッグを1回の連続した操作で
+    // 行った場合、Fabric内部では「つかむ対象」がそのmousedownの時点で
+    // 単独オブジェクトのまま確定してしまい、その後で選択をActiveSelectionに
+    // 差し替えても、実際にドラッグされているのは元の単独オブジェクトの
+    // ままだった（＝図形だけ動いてテキストが置き去りになる不具合）。
+    // そのため、ここでは選択の仕組みに頼らず、コネクタ線の追従と同じ
+    // 「動いた分だけ、対応する相手にも同じだけ動かす」という直接的な
+    // 方式で確実に追従させる。
+    function syncGroupMembersOnMove(opt) {
+      const target = opt.target;
+      if (!target || !target.groupId || target._objects) return; // _objectsがある(=ActiveSelection等)場合はFabricが中身を自動で一緒に動かすので対象外
+      if (target._grpLastLeft === undefined) {
+        // このドラッグでの最初のイベントでは基準位置を記録するだけ
+        target._grpLastLeft = target.left;
+        target._grpLastTop = target.top;
+        return;
+      }
+      const dx = target.left - target._grpLastLeft;
+      const dy = target.top - target._grpLastTop;
+      if (dx || dy) {
+        canvas.getObjects().forEach(o => {
+          if (o !== target && o.groupId === target.groupId && !o.isLocked) {
+            o.set({ left: o.left + dx, top: o.top + dy });
+            o.setCoords();
+            updateConnectorLinesFor(o); // グループの相手に接続線が繋がっている場合も追従させる
+          }
+        });
+        canvas.requestRenderAll();
+      }
+      target._grpLastLeft = target.left;
+      target._grpLastTop = target.top;
+    }
+    canvas.on('object:moving', syncGroupMembersOnMove);
+    canvas.on('mouse:up', function() {
+      canvas.getObjects().forEach(o => { delete o._grpLastLeft; delete o._grpLastTop; });
+    });
+
     // 要素が削除されたら、それにつながっていた接続線や、固定(ロック)バッジも
     // 一緒に削除する（宙に浮いたままにならないようにする）。ここを削除処理の
     // 一箇所に集約することで、消しゴム／選択削除／複数削除など
@@ -1729,18 +1838,28 @@
       if (target && target === activeLockIcon) {
         const obj = target.lockIconFor;
         if (obj) {
+          // グループ化されている（例：図形とラベル文字）場合は、
+          // グループ全員をまとめて固定/固定解除する。ラベル文字は図形の
+          // ちょうど中央・最前面に重なっているため、長押しで実際に当たった
+          // のが図形かテキストかはユーザーからは区別しづらい。片方だけが
+          // ロックされる中途半端な状態を避けるため、常にグループ全体を揃える。
+          const members = obj.groupId
+            ? canvas.getObjects().filter(o => o.groupId === obj.groupId)
+            : [obj];
           if (obj.isLocked) {
-            obj.set({
-              selectable: true,
-              isLocked: false
+            members.forEach(o => {
+              o.set({ selectable: true, isLocked: false });
+              removeLockBadge(o);
             });
-            removeLockBadge(obj);
           } else {
-            obj.set({
-              selectable: false,
-              isLocked: true
-            });
-            createLockBadge(obj);
+            members.forEach(o => { o.set({ selectable: false, isLocked: true }); });
+            // グループ（メンバー2人以上）の場合はバッジを1個だけ、全員を
+            // 囲む範囲にまとめる。単独オブジェクトの場合は従来通り。
+            if (members.length > 1) {
+              createLockBadgeForGroup(members);
+            } else {
+              createLockBadge(obj);
+            }
             canvas.discardActiveObject();
           }
           updateDeleteButtonState();
@@ -1960,10 +2079,18 @@
           // 固定済みのオブジェクトは selectable=false のため選択状態にはしない
           // （ロックアイコンだけを表示し、固定解除の入口として使う）。
           if (!action.target.isLocked) {
+            // ロック用の長押し選択は「このオブジェクト単体」への操作なので、
+            // グループの一員でもグループ全体へは展開しない。
+            suppressGroupAutoExpand = true;
             canvas.setActiveObject(action.target);
           }
           showLockIconFor(action.target);
         } else {
+          // ボタンクリックでの選択モードON時と同様、コネクタモードが
+          // 有効なままだと残ってしまう不具合があったため、ここでも解除する。
+          if (currentDrawMode === 'connector') {
+            setDrawMode('pen');
+          }
           isSelectMode = true;
           selectModeBtn.classList.add('active');
         }
@@ -2033,6 +2160,7 @@
     });
 
     function onSelection(e) {
+      if (expandToFullGroupIfNeeded()) return; // 展開後のselection:createdが再度onSelectionを呼ぶので、ここでは何もしない
       const activeObject = e.selected ? e.selected[0] : canvas.getActiveObject();
       if (activeObject && activeObject.type === 'i-text') {
         textColorInput.value = activeObject.fill || '#222222';
@@ -2234,7 +2362,8 @@
 
       const json = JSON.stringify(canvas.toJSON([
         'isOriginMark', 'isLocked', 'selectable',
-        'connId', 'isConnectorLine', 'connFromId', 'connToId', 'arrowType'
+        'connId', 'isConnectorLine', 'connFromId', 'connToId', 'arrowType',
+        'groupId'
       ]));
       history.push(json);
       if (history.length > MAX_HISTORY) history.shift(); // 上限を超えたら古い履歴から破棄
@@ -2263,6 +2392,7 @@
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
           refreshAllLockBadges();
+          refreshLabeledShapeHitAreas();
           refreshAllConnectorLines(); // 旧バージョンの中心接続の線も、図形の縁基準の位置に補正する
           canvas.renderAll();
           updateHistoryButtons();
@@ -2282,6 +2412,7 @@
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
           refreshAllLockBadges();
+          refreshLabeledShapeHitAreas();
           refreshAllConnectorLines();
           canvas.renderAll();
           updateHistoryButtons();
@@ -2312,6 +2443,7 @@
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
           refreshAllLockBadges();
+          refreshLabeledShapeHitAreas();
           refreshAllConnectorLines();
           canvas.renderAll();
           history = [pageJson];
@@ -2361,6 +2493,8 @@
     const bgStyleSelect = document.getElementById('bg-style');
     const paperSizeSelect = document.getElementById('paper-size-select');
     const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+    const groupBtn = document.getElementById('group-btn');
+    const ungroupBtn = document.getElementById('ungroup-btn');
     const imgFileInput = document.getElementById('img-file-input');
 
     // ============================================================
@@ -2493,8 +2627,11 @@
         targets.forEach(obj => {
           if (isGuideObject(obj) || obj.type === 'i-text' || obj.type === 'image') return;
           obj.set('stroke', penColorInput.value);
-          // 塗りつぶしがある図形（透明でない）は塗りの色も合わせて変える
-          if (obj.fill && obj.fill !== 'transparent') {
+          // 塗りつぶしがある図形（透明でない）は塗りの色も合わせて変える。
+          // ただし当たり判定のためだけに極薄の塗り(rgba(0,0,0,0.01))を
+          // 入れているラベル付き図形は対象外にする（_hitTestOnlyFillフラグは
+          // 保存対象に含めていないため、値そのもので判定する）。
+          if (obj.fill && obj.fill !== 'transparent' && obj.fill !== 'rgba(0,0,0,0.01)') {
             obj.set('fill', penColorInput.value);
           }
           changed = true;
@@ -2691,9 +2828,132 @@
     }
 
     deleteSelectedBtn.addEventListener('click', deleteSelectedObjects);
+
+    // --- グループ化 ---
+    // 実際にFabricのfabric.Group（要素をキャンバス直下の一覧から
+    // グループの中へ移してしまう）は使わない。この作り込みは、コネクタの
+    // 接続先検索・色変更・ロック・削除など、あちこちの機能が
+    // 「キャンバス直下にすべての要素がフラットに並んでいる」ことを前提にして
+    // いるため、要素を入れ子にすると連鎖的に壊れる箇所が多い。
+    // 代わりに、選択した要素それぞれに共通の groupId を振るだけの軽量な
+    // 方式にする。要素自体はこれまで通りキャンバス直下のフラットな並びの
+    // ままなので、コネクタ等の既存機能に一切影響しない。
+    // 「まとめて選択・移動できる」という体験は、いずれかのメンバーが
+    // 選択されたときに自動的に同じgroupIdを持つ全員をActiveSelection
+    // （Fabric標準の複数選択）へ置き換えることで実現する
+    // （expandToFullGroupIfNeeded を参照）。
+    // ラベル付き図形（groupIdを持つ、塗りが透明な四角/楕円/多角形）は、
+    // 内部が完全に透明なままだと、Fabricのper-pixel当たり判定により
+    // 「縁（線）は当たるが内側をタップすると何も無い場所として扱われる」
+    // という状態になる。ラベル文字はちょうど図形の中央に乗るため、
+    // ユーザーが図形自体をつかもうとして中央寄りを押すと、この仕様のせいで
+    // 掴めず（＝ロックできない・選択できない）ことがあった。
+    // 見た目にはほぼ影響しない極薄の塗り(alpha 0.01)を入れることで、
+    // 内側全体をタップ可能にする。
+    function makeShapeInteriorTappable(shape) {
+      if (!shape) return;
+      if ((shape.type === 'rect' || shape.type === 'ellipse' || shape.type === 'polygon') && shape.fill === 'transparent') {
+        shape.set('fill', 'rgba(0,0,0,0.01)');
+        // 「見た目上の塗り色」ではなく当たり判定のためだけの塗りであることの
+        // 目印。ペン色変更を選択中の図形へ反映する機能（下の方の
+        // penColorInput 変更ハンドラ）が、これを「塗りつぶしのある図形」と
+        // 誤認識して実際の色で塗りつぶしてしまわないよう、そちらで参照する。
+        shape._hitTestOnlyFill = true;
+      }
+    }
+
+    // ページ読み込み・元に戻す/やり直し等でキャンバスの中身が丸ごと
+    // 差し替わった直後に呼ぶ。過去のバージョンで作られたラベル付き図形
+    // （塗りが透明なまま保存されているもの）にも遡って適用する。
+    function refreshLabeledShapeHitAreas() {
+      canvas.getObjects().forEach(obj => { if (obj.groupId) makeShapeInteriorTappable(obj); });
+    }
+
+    function generateGroupId() {
+      return 'grp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+    }
+
+    function groupSelectedObjects() {
+      const active = canvas.getActiveObject();
+      if (!active || active.type !== 'activeSelection' || !active._objects) return;
+      const members = active._objects.filter(o => !isGuideObject(o));
+      if (members.length < 2) return;
+      const gid = generateGroupId();
+      members.forEach(o => { o.groupId = gid; });
+      updateGroupButtonState();
+      canvas.requestRenderAll();
+      saveState();
+    }
+
+    function ungroupSelectedObjects() {
+      const active = canvas.getActiveObject();
+      let members = [];
+      if (active && active.type === 'activeSelection' && active._objects) {
+        members = active._objects.filter(o => o.groupId);
+      } else if (active && active.groupId) {
+        members = canvas.getObjects().filter(o => o.groupId === active.groupId);
+      }
+      if (!members.length) return;
+      members.forEach(o => { delete o.groupId; });
+      updateGroupButtonState();
+      canvas.requestRenderAll();
+      saveState();
+    }
+
+    groupBtn.addEventListener('click', groupSelectedObjects);
+    ungroupBtn.addEventListener('click', ungroupSelectedObjects);
+
+    // 選択中の1つが groupId を持っていた場合、自動的に同じgroupIdの
+    // 全メンバーをActiveSelectionへ置き換える。再入防止のため
+    // isExpandingGroupSelection で多重実行を防ぐ。
+    // テキスト(i-text)は、ダブルクリックでの編集開始と競合してしまうため
+    // 対象外にする（テキストだけは常に単独選択のまま）。
+    let isExpandingGroupSelection = false;
+    // 個別選択の意味合いが強い操作（ロック用の長押し選択など）の直前に
+    // これをtrueにしておくと、その1回だけグループへの展開をスキップする。
+    let suppressGroupAutoExpand = false;
+    function expandToFullGroupIfNeeded() {
+      if (isExpandingGroupSelection) return false;
+      if (suppressGroupAutoExpand) { suppressGroupAutoExpand = false; return false; }
+      const active = canvas.getActiveObject();
+      if (!active || active.type === 'activeSelection' || active.type === 'i-text') return false;
+      const gid = active.groupId;
+      if (!gid) return false;
+      // ロック中のメンバーは、グループの一員であっても自動展開には含めない。
+      // 含めてしまうと「動かないはずのロック中オブジェクト」が、グループを
+      // 動かした拍子に一緒に動いてしまい、ロックの意味が壊れるため。
+      const members = canvas.getObjects().filter(o => o.groupId === gid && !o.isLocked);
+      if (members.length < 2) return false;
+      isExpandingGroupSelection = true;
+      canvas.discardActiveObject();
+      const sel = new fabric.ActiveSelection(members, { canvas });
+      canvas.setActiveObject(sel);
+      isExpandingGroupSelection = false;
+      return true;
+    }
+
+    function updateGroupButtonState() {
+      const active = canvas.getActiveObject();
+      let canGroup = false;
+      let canUngroup = false;
+      if (active && active.type === 'activeSelection' && active._objects) {
+        const members = active._objects.filter(o => !isGuideObject(o));
+        if (members.length >= 2) {
+          const alreadyOneGroup = !!members[0].groupId && members.every(o => o.groupId === members[0].groupId);
+          canGroup = !alreadyOneGroup;
+          canUngroup = members.some(o => o.groupId);
+        }
+      } else if (active && active.groupId) {
+        canUngroup = true;
+      }
+      groupBtn.disabled = !canGroup;
+      ungroupBtn.disabled = !canUngroup;
+    }
+
     function updateDeleteButtonState() {
       const activeObjects = canvas.getActiveObjects().filter(o => !isGuideObject(o));
       deleteSelectedBtn.disabled = !(activeObjects && activeObjects.length > 0);
+      updateGroupButtonState();
     }
 
     let saveTimeout = null;
@@ -3137,8 +3397,20 @@
       // 発火しない、または native のズーム/移動ジェスチャーに化けることがあり、
       // タッチ操作をこの一本に頼るのは不安定だったため。
       if (options.e && options.e.pointerType === 'touch') return;
+      // コネクタモードには「同じ要素をもう一度タップすると選択をキャンセル」
+      // という公式の操作があり、これを素早く行うとそのままダブルタップの
+      // 条件に該当してしまう。キャンセルのつもりが文字入力欄も一緒に
+      // 出てきてしまわないよう、コネクタモード中だけは新規テキスト作成をしない。
+      // （消しゴムモードは「なぞって消す」が基本操作で、同じ場所への
+      // 2回連続タップ自体があまり起きないため、以前あった制限は撤回した）
+      if (currentDrawMode === 'connector') return;
       if (blocksDoubleTapTextCreation(options.target)) return;
       if (exitSelectModeIfActive()) return;
+      if (isLabelableShape(options.target)) {
+        const center = options.target.getCenterPoint();
+        createNewTextBox(center.x, center.y, { centered: true, linkToShape: options.target });
+        return;
+      }
       const pointer = canvas.getPointer(options.e);
       createNewTextBox(pointer.x, pointer.y);
     });
@@ -3177,10 +3449,18 @@
       if (isDoubleTap) {
         lastTapTime = 0;
         lastTapPos = null;
+        // コネクタモード中は新規テキスト作成をしない（上のmouse:dblclick側と同じ理由。
+        // 消しゴムモードの制限は、なぞり消しが基本操作で誤検知の懸念が薄いため撤回した）
+        if (currentDrawMode === 'connector') return;
         const target = canvas.findTarget(e, false);
-        if (blocksDoubleTapTextCreation(target)) return; // 画像・テキストの上だけは選択/編集操作に譲る
+        if (blocksDoubleTapTextCreation(target)) return; // テキストの上だけは編集操作に譲る（画像・図形の上は新規テキスト作成を許可）
         if (e.cancelable) e.preventDefault(); // ネイティブのズーム等を確実に打ち消す
         if (exitSelectModeIfActive()) return;
+        if (isLabelableShape(target)) {
+          const center = target.getCenterPoint();
+          createNewTextBox(center.x, center.y, { centered: true, linkToShape: target });
+          return;
+        }
         const pointer = canvas.getPointer(e);
         createNewTextBox(pointer.x, pointer.y);
       } else {
@@ -3257,9 +3537,29 @@
       saveState();
     }
 
-    function createNewTextBox(x, y) {
+    // 図形(手書き線・変換後の図形)の上でダブルタップされたかどうかを判定する。
+    // コネクタ線(isConnectorLine)は「図形」としてはラベル付けの対象外にする
+    // （矢印の途中にラベルを置く機能ではないため）。
+    function isLabelableShape(obj) {
+      if (!obj || isGuideObject(obj) || obj.isConnectorLine || obj.isLocked) return false;
+      return obj.type === 'rect' || obj.type === 'ellipse' || obj.type === 'line' ||
+        obj.type === 'polygon' || obj.type === 'path';
+    }
+
+    // options.centered: true の場合、(x,y)を左上ではなく中心として配置する
+    // （文字を打つにつれて左右に均等に広がるようにするため）。
+    // options.linkToShape: 指定すると、そのオブジェクトと今回作るテキストを
+    // グループ化と同じ仕組み(共通groupId)で結び付け、以後どちらかを動かすと
+    // 一緒に付いてくるようにする。
+    function createNewTextBox(x, y, options) {
+      options = options || {};
+      const centered = !!options.centered;
       const text = new fabric.IText('', {
-        left: x, top: y, fontSize: parseInt(fontSizeInput.value, 10) || 22,
+        left: x, top: y,
+        originX: centered ? 'center' : 'left',
+        originY: centered ? 'center' : 'top',
+        textAlign: centered ? 'center' : 'left',
+        fontSize: parseInt(fontSizeInput.value, 10) || 22,
         fill: textColorInput.value, fontFamily: fontSelect.value,
         editingBorderColor: '#0d3b8c' // 編集中の点線枠の視認性を高めるため濃い色にする
       });
@@ -3267,6 +3567,26 @@
       canvas.setActiveObject(text);
       text.enterEditing();
       canvas.renderAll();
+
+      const shape = options.linkToShape;
+      if (shape) {
+        const gid = shape.groupId || generateGroupId();
+        text.once('editing:exited', function() {
+          // 何も入力せずに編集を終えた場合は、中身の無いラベルを
+          // 図形に残さないよう自動で削除する。
+          if (!text.text || !text.text.trim()) {
+            canvas.remove(text);
+            canvas.renderAll();
+          } else {
+            shape.groupId = gid;
+            text.groupId = gid;
+            makeShapeInteriorTappable(shape);
+          }
+          updateGroupButtonState();
+          saveState();
+        });
+      }
+
       saveState();
     }
 
@@ -3592,7 +3912,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.149     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.158     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
