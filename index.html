@@ -570,17 +570,19 @@
           <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <defs>
               <clipPath id="eraserBodyClip">
-                <rect x="3" y="7" width="18" height="10" rx="2.5"></rect>
+                <rect x="3" y="7" width="18" height="10" rx="2"></rect>
               </clipPath>
             </defs>
             <g transform="rotate(-20 12 12)">
-              <rect x="3" y="7" width="18" height="10" rx="2.5" fill="#f8a5c2"></rect>
-              <rect x="3" y="13" width="18" height="4" fill="#ffffff" clip-path="url(#eraserBodyClip)"></rect>
-              <rect x="3" y="7" width="18" height="10" rx="2.5" fill="none" stroke="#c2185b" stroke-width="1.2"></rect>
+              <rect x="3" y="7" width="18" height="10" rx="2" fill="#fbfbf8"></rect>
+              <rect x="3" y="7" width="18" height="4" fill="#2f6fed" clip-path="url(#eraserBodyClip)"></rect>
+              <rect x="3" y="7" width="18" height="10" rx="2" fill="none" stroke="#1a1a1a" stroke-width="1.1"></rect>
             </g>
           </svg>
         </button>
+        <button id="eraser-partial-btn" class="toggle-btn" title="部分消し ON/OFF（ONのとき、手書き線はなぞった部分だけ消えます。OFFなら要素ごと消えます）" style="font-size:11px;">〰️部分</button>
         <button id="select-mode-btn" class="toggle-btn" title="選択モード（ONの間、1回のタップ/クリックでオブジェクトを選択・移動できます）">👆 選択</button>
+        <button id="lasso-mode-btn" class="toggle-btn" title="なげなわ選択（ペンで自由に囲んだ内側の要素をまとめて選択します）">🪢 なげなわ</button>
         <div class="tool-item" style="position:relative;">
           <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップ、または1つ目を押したまま2つ目までドラッグして繋ぐと線で接続します。接続された要素は動かしても線が繋がったままになります。押すとON、もう一度押すとOFFになります）">🔗 コネクタ <span id="connector-type-indicator">―</span></button>
           <div class="color-popup connector-type-popup" id="connector-type-popup">
@@ -596,6 +598,13 @@
                 <button type="button" class="connector-type-option" data-group="dash" data-value="solid">実線</button>
                 <button type="button" class="connector-type-option" data-group="dash" data-value="dashed">破線</button>
               </div>
+              <div class="connector-type-group-label">経路</div>
+              <div class="connector-type-row">
+                <button type="button" class="connector-type-option" data-group="route" data-value="straight">直線</button>
+                <button type="button" class="connector-type-option" data-group="route" data-value="elbow">直角</button>
+                <button type="button" class="connector-type-option" data-group="route" data-value="bezier">曲線</button>
+              </div>
+              <div class="connector-type-group-label" style="opacity:0.75; font-weight:normal;">💡 選択モード中に接続線をダブルタップすると関係ラベル（文字）を付けられます</div>
             </div>
           </div>
         </div>
@@ -610,6 +619,7 @@
           <div class="color-popup" id="pen-color-popup">
             <div class="color-preset-grid" data-target="pen-color"></div>
             <label class="color-more-btn" for="pen-color">🎨 もっと見る…</label>
+            <button type="button" class="color-more-btn eyedropper-pick-btn" data-target="pen-color">💧 キャンバスから色を取得</button>
           </div>
         </div>
         <div class="tool-item" title="ペンの太さ">
@@ -649,6 +659,7 @@
           <div class="color-popup" id="text-color-popup">
             <div class="color-preset-grid" data-target="text-color"></div>
             <label class="color-more-btn" for="text-color">🎨 もっと見る…</label>
+            <button type="button" class="color-more-btn eyedropper-pick-btn" data-target="text-color">💧 キャンバスから色を取得</button>
           </div>
         </div>
       </div>
@@ -694,7 +705,16 @@
         </div>
       </div>
 
-      <!-- 7. 出力・消去（頻度が低く、消去は誤操作防止のため他から離して末尾に配置） -->
+      <!-- 7. データ入出力（全ページのデータをファイルとして保存・読み込み） -->
+      <div class="tool-group">
+        <button id="export-json-btn" title="全ページのデータを1つのファイルに保存します（他の端末やあとで読み込み直せます）">📤 データ書出</button>
+        <label class="file-label" title="書き出したデータファイルを読み込みます（現在の内容は上書きされます）">
+          📥 データ読込
+          <input type="file" id="import-json-input" accept="application/json,.json">
+        </label>
+      </div>
+
+      <!-- 8. 出力・消去（頻度が低く、消去は誤操作防止のため他から離して末尾に配置） -->
       <div class="tool-group">
         <button id="export-btn" title="全描画をPNG画像保存">💾 PNG</button>
         <button id="export-pdf-btn" class="pdf-btn" title="全描画をPDF出力">📄 PDF</button>
@@ -710,8 +730,11 @@
        画面外（切り取られた状態）に隠れてしまうため、意図的に兄弟要素にしている。 -->
   <div class="btn-fixed-right">
     <button id="delete-selected-btn" class="delete-btn" disabled title="選択オブジェクトを削除">🗑️</button>
+    <button id="duplicate-selected-btn" class="group-btn" disabled title="選択オブジェクトを複製 (Ctrl+D)">📋</button>
     <button id="group-btn" class="group-btn" disabled title="選択した複数のオブジェクトをグループ化（以後まとめて選択・移動できます）">🧩</button>
     <button id="ungroup-btn" class="group-btn" disabled title="グループ化を解除">✂️</button>
+    <button id="align-left-btn" class="group-btn" disabled title="選択した複数オブジェクトを、一番左にあるものに揃えて整列します">⬅️</button>
+    <button id="ocr-btn" class="group-btn" disabled title="選択した手書き文字をテキストデータに変換します（インターネット接続が必要です）">🔤</button>
     <button id="reset-view-btn" class="center-btn" title="初期位置（中央）へ戻す">🎯</button>
     <button id="fit-content-btn" class="fit-btn" title="全描画を画面に収める">🔍</button>
     <button id="undo-btn" class="history-btn" disabled title="元に戻す (Ctrl+Z)">↩️</button>
@@ -796,6 +819,21 @@
           <li><b>Ctrl + Z</b>: 1つ前の操作を取り消す（元に戻す）</li>
           <li><b>Ctrl + Y</b>: 取り消した操作をやり直す</li>
           <li><b>Delete / Backspace</b>: 選択中のオブジェクトを削除</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>🆕 追加機能</h4>
+        <ul>
+          <li><b>📋 複製</b>: オブジェクトを選択して右側の「📋」ボタン（またはCtrl+D）で、少しずらした位置にコピーを作れます。</li>
+          <li><b>🪢 なげなわ選択</b>: 「🪢 なげなわ」をONにして自由な形に囲むと、内側にある要素をまとめて選択できます（矩形ドラッグでの選択と併用できます）。</li>
+          <li><b>⬅️ 左揃え</b>: 複数のオブジェクトを選択すると、右側の「⬅️」ボタンで一番左にあるものに揃えて整列できます。</li>
+          <li><b>🔗 コネクタの経路と関係ラベル</b>: コネクタボタンのメニューで「経路」（直線／直角／曲線）を選べます。直角・曲線は、他のオブジェクトを避けるように自動で少し迂回します。また、選択モード中に接続線をダブルタップすると、関係性を示す文字ラベル（例：「所属」「依存」など）を付けられます。</li>
+          <li><b>🧲 スナップ吸着ガイド</b>: オブジェクトを移動すると、他のオブジェクトの端・中心や方眼の格子に近づいた時、ピンク色の補助線が表示されてピタッと揃います。</li>
+          <li><b>📤 データ書出 / 📥 データ読込</b>: 全ページの内容を1つのファイル(.json)にまとめて保存・復元できます。他の端末に移したり、バックアップとして保管したりするのに使えます（PNG/PDFと違い、あとで再編集できる形式です）。</li>
+          <li><b>💧 スポイト</b>: 「色」パレットの「💧 キャンバスから色を取得」を押した後、キャンバス上の画像・手書き線・背景など好きな場所をタップすると、その色をペン色/文字色として取得できます。</li>
+          <li><b>〰️ 部分消し</b>: 消しゴムモード中に「〰️部分」をONにすると、手書き線はなぞった部分だけが消えます（OFF＝従来通り要素ごと消去）。図形・文字・画像は引き続き要素ごとの削除のみです。</li>
+          <li><b>🔤 文字認識</b>: 手書き文字を選択して右側の「🔤」ボタンを押すと、無料のオンラインAPIを使って文字データ（テキスト）に変換し、隣に新しいテキストとして追加します。インターネット接続が必要で、無料APIのため混雑時は失敗することがあります（元の手書きはそのまま残ります）。</li>
         </ul>
       </div>
 
@@ -974,7 +1012,7 @@
         isTwoFingerTouch = false;
         touchStartDist = 0;
         
-        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') {
+        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') {
           canvas.isDrawingMode = true;
         }
       }
@@ -1123,7 +1161,7 @@
 
       // 消しゴムモード中は、なぞって連続的に消す操作を四角い範囲選択と
       // 誤認識させないよう、Fabric標準の範囲選択（マーキー選択）を無効化する。
-      canvas.selection = (currentDrawMode !== 'eraser' && currentDrawMode !== 'connector');
+      canvas.selection = (currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper');
 
       if (currentDrawMode === 'pen') {
         canvas.isDrawingMode = !isPanLockMode && !isSelectMode;
@@ -1190,7 +1228,7 @@
     // ここでは実際にFabricへイベントが渡る前に isDrawingMode を確定させることで、
     // その競合を根本的に解消する。
     function precomputeInteractionMode(e) {
-      if (currentDrawMode === 'eraser') { canvas.isDrawingMode = false; return; }
+      if (currentDrawMode === 'eraser' || currentDrawMode === 'lasso' || currentDrawMode === 'eyedropper') { canvas.isDrawingMode = false; return; }
 
       const isCtrl = e.ctrlKey || e.metaKey || isCtrlKeyPhysicallyHeld;
       const isShift = e.shiftKey;
@@ -1300,16 +1338,6 @@
       // 全員が同じバッジ参照を共有する（削除時はどのメンバーから呼んでも
       // 消せるようにするため）。
       members.forEach(o => { o._lockBadge = badge; });
-    }
-
-    function removeLockBadge(obj) {
-      if (obj && obj._lockBadge) {
-        const badge = obj._lockBadge;
-        // グループの場合、複数メンバーが同じバッジ参照を共有しているため、
-        // 既に他メンバーの削除で消え済みのことがある。存在確認してから消す。
-        if (canvas.getObjects().indexOf(badge) !== -1) canvas.remove(badge);
-        delete obj._lockBadge;
-      }
     }
 
     // ページ読み込み・元に戻す/やり直し等でキャンバスの中身が丸ごと
@@ -1597,10 +1625,151 @@
     }
 
     // 接続線1本の始点・終点を、現在の2つの要素の位置関係から再計算する。
+    // コネクタ線に一意のIDを振る（矢頭パーツ・関係ラベルの紐付けに使う。
+    // connId/connFromId/connToId は「両端の要素」を指すIDなので、
+    // 「線そのもの」を指すためのIDが別途必要）。
+    function ensureLineId(line) {
+      if (!line._lineId) {
+        line._lineId = 'ln_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+      }
+      return line._lineId;
+    }
+
+    function removeConnectorArrowHeads(lineId) {
+      if (!lineId) return;
+      canvas.getObjects().slice().forEach(o => { if (o.arrowOwnerId === lineId) canvas.remove(o); });
+    }
+
+    // 矢じり（三角形）を1個、指定した位置・向きに作る。fabric.Lineの矢印は
+    // _render の直描きで実現しているが、fabric.Path（直角/曲線ルート）には
+    // 同じ手法を使うと内部座標系（pathOffset）の扱いが複雑になり不具合の元になるため、
+    // 代わりにキャンバス絶対座標に置く小さな独立した三角形オブジェクトとして描く。
+    function addConnectorArrowHead(lineId, color, strokeWidth, end) {
+      if (!end) return;
+      const len = Math.hypot(end.dx, end.dy) || 1;
+      const ux = end.dx / len, uy = end.dy / len;
+      const size = Math.max(10, (strokeWidth || 2) * 4.5);
+      const angleDeg = Math.atan2(uy, ux) * 180 / Math.PI + 90;
+      const tri = new fabric.Triangle({
+        left: end.x - ux * (size * 0.5),
+        top: end.y - uy * (size * 0.5),
+        originX: 'center', originY: 'center',
+        width: size, height: size * 1.15,
+        angle: angleDeg,
+        fill: color || '#555555',
+        stroke: null,
+        selectable: false, evented: false,
+        excludeFromExport: true,
+        objectCaching: false,
+        arrowOwnerId: lineId
+      });
+      canvas.add(tri);
+      canvas.bringToFront(tri);
+    }
+
+    function rebuildConnectorArrowHeads(line) {
+      removeConnectorArrowHeads(line._lineId);
+      if (!line.arrowType || line.arrowType === 'none') return;
+      if (line.arrowType === 'end' || line.arrowType === 'both') addConnectorArrowHead(line._lineId, line.stroke, line.strokeWidth, line._arrowEndB);
+      if (line.arrowType === 'start' || line.arrowType === 'both') addConnectorArrowHead(line._lineId, line.stroke, line.strokeWidth, line._arrowEndA);
+    }
+
+    // 関係ラベル（コネクタ線に付けた文字）を、線の中点に追従させる。
+    function positionConnectorLabel(lineId, pA, pB) {
+      if (!lineId) return;
+      const label = canvas.getObjects().find(o => o.labelForLineId === lineId);
+      if (!label) return;
+      label.set({ left: (pA.x + pB.x) / 2, top: (pA.y + pB.y) / 2 });
+      label.setCoords();
+    }
+
+    // 直角(elbow)／曲線(bezier)ルートのSVGパス文字列と、両端での矢印の向きを組み立てる。
+    // obstacles: 避けたい他のオブジェクトの配列（簡易的な自動迂回に使う）。
+    function buildConnectorPathString(pA, pB, routeType, obstacles) {
+      if (routeType === 'bezier') {
+        const mx = (pA.x + pB.x) / 2, my = (pA.y + pB.y) / 2;
+        const dx = pB.x - pA.x, dy = pB.y - pA.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len, ny = dx / len; // 直線に対する法線方向
+        let bow = 0;
+        (obstacles || []).forEach(o => {
+          let r;
+          try { r = o.getBoundingRect(true, true); } catch (e) { return; }
+          const pad = 12;
+          if (mx >= r.left - pad && mx <= r.left + r.width + pad && my >= r.top - pad && my <= r.top + r.height + pad) {
+            bow = Math.max(bow, Math.max(r.width, r.height) / 2 + 24);
+          }
+        });
+        if (bow === 0) bow = Math.min(30, Math.max(16, len * 0.12)); // 障害物が無くても軽く弧を付け、直線と見分けやすくする
+        const cx = mx + nx * bow, cy = my + ny * bow;
+        const d = `M ${pA.x} ${pA.y} Q ${cx} ${cy} ${pB.x} ${pB.y}`;
+        return {
+          d,
+          endA: { x: pA.x, y: pA.y, dx: pA.x - cx, dy: pA.y - cy },
+          endB: { x: pB.x, y: pB.y, dx: pB.x - cx, dy: pB.y - cy }
+        };
+      }
+
+      // 直角(elbow)：中間で1回だけ「く」の字に曲がる経路。
+      // 中間の縦（または横）線が他のオブジェクトと重なる場合、その障害物の
+      // すぐ外側まで曲がり位置をずらす簡易的な自動迂回を試みる（完全な
+      // 経路探索ではないベストエフォートの迂回）。
+      const horizontalFirst = Math.abs(pB.x - pA.x) >= Math.abs(pB.y - pA.y);
+      let midX = (pA.x + pB.x) / 2;
+      let midY = (pA.y + pB.y) / 2;
+
+      if (horizontalFirst) {
+        const yMin = Math.min(pA.y, pB.y), yMax = Math.max(pA.y, pB.y);
+        (obstacles || []).forEach(o => {
+          let r;
+          try { r = o.getBoundingRect(true, true); } catch (e) { return; }
+          const overlapsY = yMax >= r.top - 4 && yMin <= r.top + r.height + 4;
+          if (overlapsY && midX >= r.left - 10 && midX <= r.left + r.width + 10) {
+            const distLeft = Math.abs(midX - (r.left - 14));
+            const distRight = Math.abs((r.left + r.width + 14) - midX);
+            midX = distLeft <= distRight ? (r.left - 14) : (r.left + r.width + 14);
+          }
+        });
+        const p1 = { x: midX, y: pA.y };
+        const p2 = { x: midX, y: pB.y };
+        const d = `M ${pA.x} ${pA.y} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${pB.x} ${pB.y}`;
+        return {
+          d,
+          endA: { x: pA.x, y: pA.y, dx: pA.x - p1.x, dy: pA.y - p1.y },
+          endB: { x: pB.x, y: pB.y, dx: pB.x - p2.x, dy: pB.y - p2.y }
+        };
+      } else {
+        const xMin = Math.min(pA.x, pB.x), xMax = Math.max(pA.x, pB.x);
+        (obstacles || []).forEach(o => {
+          let r;
+          try { r = o.getBoundingRect(true, true); } catch (e) { return; }
+          const overlapsX = xMax >= r.left - 4 && xMin <= r.left + r.width + 4;
+          if (overlapsX && midY >= r.top - 10 && midY <= r.top + r.height + 10) {
+            const distTop = Math.abs(midY - (r.top - 14));
+            const distBottom = Math.abs((r.top + r.height + 14) - midY);
+            midY = distTop <= distBottom ? (r.top - 14) : (r.top + r.height + 14);
+          }
+        });
+        const p1 = { x: pA.x, y: midY };
+        const p2 = { x: pB.x, y: midY };
+        const d = `M ${pA.x} ${pA.y} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${pB.x} ${pB.y}`;
+        return {
+          d,
+          endA: { x: pA.x, y: pA.y, dx: pA.x - p1.x, dy: pA.y - p1.y },
+          endB: { x: pB.x, y: pB.y, dx: pB.x - p2.x, dy: pB.y - p2.y }
+        };
+      }
+    }
+
+    // 接続線1本の始点・終点（と、直角/曲線の場合は経路全体）を、現在の
+    // 2つの要素の位置関係から再計算する。直角/曲線ルートは、fabric.Pathの
+    // 内部寸法キャッシュを直接書き換えるのは不具合の元になりやすいため、
+    // 毎回オブジェクトごと作り直す方式にしている（戻り値が「今の正しい
+    // オブジェクト」なので、呼び出し側は必ず戻り値を使うこと）。
     function refreshConnectorLine(line) {
       const objA = findObjectByConnId(line.connFromId);
       const objB = findObjectByConnId(line.connToId);
-      if (!objA || !objB) return; // 対応する要素が見つからない（削除済み等）場合は何もしない
+      if (!objA || !objB) return line; // 対応する要素が見つからない（削除済み等）場合は何もしない
 
       const centerA = getConnectorAnchorPoint(objA);
       const centerB = getConnectorAnchorPoint(objB);
@@ -1610,12 +1779,49 @@
       const pA = getRectEdgePoint(rectA, centerA, centerB);
       const pB = getRectEdgePoint(rectB, centerB, centerA);
 
-      line.set({ x1: pA.x, y1: pA.y, x2: pB.x, y2: pB.y });
-      line.setCoords();
+      const routeType = line.connRouteType || 'straight';
+
+      if (routeType === 'straight') {
+        line.set({ x1: pA.x, y1: pA.y, x2: pB.x, y2: pB.y });
+        line.setCoords();
+        ensureLineId(line);
+        positionConnectorLabel(line._lineId, pA, pB);
+        return line;
+      }
+
+      ensureLineId(line);
+      const obstacles = canvas.getObjects().filter(o =>
+        o !== line && o !== objA && o !== objB && !isGuideObject(o) &&
+        !o.isConnectorLine && !o.arrowOwnerId && !o.labelForLineId
+      );
+      const built = buildConnectorPathString(pA, pB, routeType, obstacles);
+
+      const idx = canvas.getObjects().indexOf(line);
+      const props = {
+        stroke: line.stroke, strokeWidth: line.strokeWidth, strokeDashArray: line.strokeDashArray,
+        fill: '', selectable: true, evented: true, hasControls: false,
+        lockMovementX: true, lockMovementY: true, hoverCursor: 'pointer',
+        isConnectorLine: true, arrowType: line.arrowType, connRouteType: routeType,
+        connFromId: line.connFromId, connToId: line.connToId, _lineId: line._lineId,
+        objectCaching: false
+      };
+      line._isInternalRebuild = true; // 直角/曲線ルートの作り直しに伴う一時的な削除であることの目印
+      canvas.remove(line);
+      const newLine = new fabric.Path(built.d, props);
+      newLine._arrowEndA = built.endA;
+      newLine._arrowEndB = built.endB;
+      if (idx >= 0 && idx <= canvas.getObjects().length) canvas.insertAt(newLine, idx, false);
+      else canvas.add(newLine);
+      rebuildConnectorArrowHeads(newLine);
+      positionConnectorLabel(newLine._lineId, pA, pB);
+      return newLine;
     }
 
     function refreshAllConnectorLines() {
-      canvas.getObjects().forEach(o => { if (o.isConnectorLine) refreshConnectorLine(o); });
+      // refreshConnectorLine が直角/曲線ルートの線をremove+addで作り直すため、
+      // ライブ配列のまま forEach すると要素を読み飛ばす恐れがある。
+      // 必ずコピーしてから走査する。
+      canvas.getObjects().slice().forEach(o => { if (o.isConnectorLine) refreshConnectorLine(o); });
       canvas.renderAll();
     }
 
@@ -1664,31 +1870,61 @@
       ensureConnId(objA);
       ensureConnId(objB);
 
-      // 矢印の種類・線種（実線/破線）・色は、その時点で「🔗 コネクタ」の
-      // 線種選択メニューで選ばれているものと「ペンの色」を使う。
+      // 矢印の種類・線種（実線/破線）・経路・色は、その時点で「🔗 コネクタ」の
+      // 選択メニューで選ばれているものと「ペンの色」を使う。
       const arrowType = connectorArrowType;
       const color = penColorInput.value;
+      const routeType = connectorRouteType;
 
-      const line = new fabric.Line([0, 0, 0, 0], {
-        stroke: color,
-        strokeWidth: 2,
-        // デフォルトは実線（strokeDashArray未指定）。「破線」が選ばれている
-        // ときだけダッシュパターンを設定する。
-        strokeDashArray: connectorDashed ? [8, 4] : null,
-        selectable: true,
-        evented: true,
-        hasControls: false, // 端点を個別にドラッグされると接続元/先とズレて同期が崩れるため無効化
-        lockMovementX: true, // 線自体の平行移動も不可にする（あくまで両端の要素に追従させる）
-        lockMovementY: true,
-        hoverCursor: 'pointer',
-        isConnectorLine: true,
-        arrowType: arrowType,
-        connFromId: objA.connId,
-        connToId: objB.connId
-      });
+      let line;
+      if (routeType === 'straight') {
+        line = new fabric.Line([0, 0, 0, 0], {
+          stroke: color,
+          strokeWidth: 2,
+          // デフォルトは実線（strokeDashArray未指定）。「破線」が選ばれている
+          // ときだけダッシュパターンを設定する。
+          strokeDashArray: connectorDashed ? [8, 4] : null,
+          selectable: true,
+          evented: true,
+          hasControls: false, // 端点を個別にドラッグされると接続元/先とズレて同期が崩れるため無効化
+          lockMovementX: true, // 線自体の平行移動も不可にする（あくまで両端の要素に追従させる）
+          lockMovementY: true,
+          hoverCursor: 'pointer',
+          isConnectorLine: true,
+          arrowType: arrowType,
+          connRouteType: 'straight',
+          connFromId: objA.connId,
+          connToId: objB.connId
+        });
+      } else {
+        // 直角/曲線ルートは fabric.Path として表現する（refreshConnectorLine内で
+        // 実際の経路と矢印を組み立てる）。
+        line = new fabric.Path('M 0 0 L 0 0', {
+          stroke: color,
+          strokeWidth: 2,
+          fill: '',
+          strokeDashArray: connectorDashed ? [8, 4] : null,
+          selectable: true,
+          evented: true,
+          hasControls: false,
+          lockMovementX: true,
+          lockMovementY: true,
+          hoverCursor: 'pointer',
+          isConnectorLine: true,
+          arrowType: arrowType,
+          connRouteType: routeType,
+          connFromId: objA.connId,
+          connToId: objB.connId,
+          objectCaching: false
+        });
+      }
+      ensureLineId(line);
 
       canvas.add(line);
-      refreshConnectorLine(line); // 中心ではなく、それぞれの図形の縁の位置に座標を合わせる
+      // 中心ではなく、それぞれの図形の縁の位置に座標を合わせる。
+      // 直角/曲線の場合はここで別オブジェクトに作り直されるため、
+      // 以降は必ず戻り値（最新のオブジェクト）を使う。
+      line = refreshConnectorLine(line);
 
       // 通常のオブジェクトより背面に、ただし中心の原点マークよりは
       // 前面になるよう並び順を調整する（他の要素のクリック判定を
@@ -1717,7 +1953,9 @@
         return;
       }
       if (!obj.connId) return;
-      canvas.getObjects().forEach(o => {
+      // refreshConnectorLine が直角/曲線ルートの線をremove+addで作り直すため、
+      // ライブ配列のまま forEach すると不整合が起きる。必ずコピーしてから走査する。
+      canvas.getObjects().slice().forEach(o => {
         if (!o.isConnectorLine) return;
         if (o.connFromId === obj.connId || o.connToId === obj.connId) {
           refreshConnectorLine(o);
@@ -1725,11 +1963,132 @@
       });
     }
 
+    // 接続線に「関係ラベル」（例：「所属」「依存」など）の文字を作成/編集する。
+    // 既にラベルがあれば編集モードで開き、無ければ線の中点に新しく作る。
+    function openConnectorLabelEditor(line) {
+      ensureLineId(line);
+      let label = canvas.getObjects().find(o => o.labelForLineId === line._lineId);
+      if (!label) {
+        const objA = findObjectByConnId(line.connFromId);
+        const objB = findObjectByConnId(line.connToId);
+        let mx = 0, my = 0;
+        if (objA && objB) {
+          const ca = getConnectorAnchorPoint(objA), cb = getConnectorAnchorPoint(objB);
+          mx = (ca.x + cb.x) / 2; my = (ca.y + cb.y) / 2;
+        }
+        label = new fabric.IText('', {
+          left: mx, top: my,
+          originX: 'center', originY: 'center', textAlign: 'center',
+          fontSize: 16, fill: '#222222', fontFamily: fontSelect.value,
+          backgroundColor: 'rgba(255,255,255,0.85)',
+          labelForLineId: line._lineId,
+          editingBorderColor: '#0d3b8c'
+        });
+        canvas.add(label);
+        label.once('editing:exited', function() {
+          // 何も入力せずに編集を終えた場合は、中身の無いラベルを残さない
+          if (!label.text || !label.text.trim()) {
+            canvas.remove(label);
+          }
+          canvas.renderAll();
+          saveState();
+        });
+      }
+      canvas.bringToFront(label);
+      canvas.setActiveObject(label);
+      label.enterEditing();
+      if (label.selectAll) label.selectAll();
+      canvas.renderAll();
+    }
+
     function handleConnectorTransformUpdate(opt) {
       if (!opt.target) return;
       updateConnectorLinesFor(opt.target);
       canvas.requestRenderAll();
     }
+    // ============================================================
+    // 🧲 スナップ吸着ガイド
+    // オブジェクトを移動している最中、他のオブジェクトの端／中心や
+    // 背景の方眼グリッドに近づくと、自動でピタッと位置を合わせ、
+    // 目印としてピンク色の点線ガイドを表示する。
+    // handleConnectorTransformUpdate（コネクタ線の追従）より必ず先に
+    // 実行されるよう、ここで（handleConnectorTransformUpdate登録より前に）登録する。
+    // ============================================================
+    const SNAP_THRESHOLD_PX = 8; // 画面上の見た目のピクセル数（ズームに応じて実座標へ換算する）
+    let snapGuideLines = [];
+    function clearSnapGuides() {
+      if (snapGuideLines.length) {
+        snapGuideLines.forEach(l => canvas.remove(l));
+        snapGuideLines = [];
+      }
+    }
+    function addSnapGuideLine(coords) {
+      const l = new fabric.Line(coords, {
+        stroke: '#ff2d92', strokeWidth: 1, strokeDashArray: [4, 4],
+        selectable: false, evented: false, excludeFromExport: true, isSnapGuide: true,
+        objectCaching: false
+      });
+      canvas.add(l);
+      canvas.bringToFront(l);
+      snapGuideLines.push(l);
+    }
+    function handleSnapping(opt) {
+      const target = opt.target;
+      clearSnapGuides();
+      if (!target || target._objects) return; // 複数選択(ActiveSelection)のスナップは対象外（単体移動のみ）
+      if (isPanLockMode || currentDrawMode === 'eraser' || currentDrawMode === 'connector' ||
+          currentDrawMode === 'lasso' || currentDrawMode === 'eyedropper') return;
+      if (target.isConnectorLine || target.arrowOwnerId || target.labelForLineId || target.isLocked) return;
+
+      const zoom = canvas.getZoom();
+      const threshold = SNAP_THRESHOLD_PX / zoom;
+      const bbox = target.getBoundingRect(true, true);
+      const tCenterX = bbox.left + bbox.width / 2, tCenterY = bbox.top + bbox.height / 2;
+      const tLeft = bbox.left, tRight = bbox.left + bbox.width;
+      const tTop = bbox.top, tBottom = bbox.top + bbox.height;
+
+      let snapDX = 0, snapDY = 0, foundX = null, foundY = null;
+
+      canvas.getObjects().forEach(o => {
+        if (o === target || isGuideObject(o) || o.isConnectorLine || o.arrowOwnerId || o.labelForLineId) return;
+        if (o.groupId && target.groupId && o.groupId === target.groupId) return;
+        const ob = o.getBoundingRect(true, true);
+        const oLeft = ob.left, oRight = ob.left + ob.width, oCenterX = ob.left + ob.width / 2;
+        const oTop = ob.top, oBottom = ob.top + ob.height, oCenterY = ob.top + ob.height / 2;
+
+        [[tLeft, oLeft], [tLeft, oRight], [tRight, oLeft], [tRight, oRight], [tCenterX, oCenterX]].forEach(([tv, ov]) => {
+          const d = ov - tv;
+          if (Math.abs(d) < threshold && (foundX === null || Math.abs(d) < Math.abs(snapDX))) { snapDX = d; foundX = ov; }
+        });
+        [[tTop, oTop], [tTop, oBottom], [tBottom, oTop], [tBottom, oBottom], [tCenterY, oCenterY]].forEach(([tv, ov]) => {
+          const d = ov - tv;
+          if (Math.abs(d) < threshold && (foundY === null || Math.abs(d) < Math.abs(snapDY))) { snapDY = d; foundY = ov; }
+        });
+      });
+
+      // 対象となる他のオブジェクトが無かった軸は、背景の方眼グリッド（中心を基準）に吸着させる
+      if (foundX === null) {
+        const nearestGridX = Math.round(tCenterX / GRID_SIZE) * GRID_SIZE;
+        if (Math.abs(nearestGridX - tCenterX) < threshold) { snapDX = nearestGridX - tCenterX; foundX = nearestGridX; }
+      }
+      if (foundY === null) {
+        const nearestGridY = Math.round(tCenterY / GRID_SIZE) * GRID_SIZE;
+        if (Math.abs(nearestGridY - tCenterY) < threshold) { snapDY = nearestGridY - tCenterY; foundY = nearestGridY; }
+      }
+
+      if (foundX !== null) {
+        target.left = (target.left || 0) + snapDX;
+        addSnapGuideLine([foundX, -20000, foundX, 20000]);
+      }
+      if (foundY !== null) {
+        target.top = (target.top || 0) + snapDY;
+        addSnapGuideLine([-20000, foundY, 20000, foundY]);
+      }
+      if (foundX !== null || foundY !== null) target.setCoords();
+    }
+    canvas.on('object:moving', handleSnapping);
+    canvas.on('mouse:up', clearSnapGuides);
+
     canvas.on('object:moving', handleConnectorTransformUpdate);
     canvas.on('object:scaling', handleConnectorTransformUpdate);
     canvas.on('object:rotating', handleConnectorTransformUpdate);
@@ -1793,6 +2152,21 @@
       linesToRemove.forEach(l => canvas.remove(l));
     });
 
+    // コネクタ線自体が削除された（直接delete、または上記のカスケード削除の
+    // どちらでも）ときは、それに付随する矢頭パーツ・関係ラベルも一緒に消す。
+    canvas.on('object:removed', function(opt) {
+      const obj = opt.target;
+      if (!obj || !obj.isConnectorLine || !obj._lineId) return;
+      // 直角/曲線ルートは経路が変わるたびに内部的にremove+addで作り直されるため、
+      // その一時的な削除では関係ラベルまで消してしまわないようにする
+      // （矢頭パーツはどのみち直後に作り直すので、消しても問題ない）。
+      const isInternalRebuild = !!obj._isInternalRebuild;
+      canvas.getObjects().slice().forEach(o => {
+        if (o.arrowOwnerId === obj._lineId) canvas.remove(o);
+        if (!isInternalRebuild && o.labelForLineId === obj._lineId) canvas.remove(o);
+      });
+    });
+
     // コネクタモードでは、要素を「押して別の要素までドラッグする」操作を
     // 独自に処理したいが、Fabricは通常のmouse:downイベントを発火する
     // “前”の時点（mouse:down:before）で、対象が selectable であれば
@@ -1804,7 +2178,7 @@
     // しておくことで、Fabric側の移動トランスフォーム準備そのものを
     // 未然に防ぐ（実際の見た目・接続判定は通常の mouse:down 側で行う）。
     canvas.on('mouse:down:before', function(opt) {
-      if (currentDrawMode !== 'connector') return;
+      if (currentDrawMode !== 'connector' && currentDrawMode !== 'lasso') return;
       const target = opt.target;
       if (target && target.selectable && !isGuideObject(target) && !target.isLocked && !target.isConnectorLine) {
         target.selectable = false;
@@ -1868,21 +2242,17 @@
             ? canvas.getObjects().filter(o => o.groupId === obj.groupId)
             : [obj];
           if (obj.isLocked) {
-            members.forEach(o => {
-              o.set({ selectable: true, isLocked: false });
-              removeLockBadge(o);
-            });
+            members.forEach(o => { o.set({ selectable: true, isLocked: false }); });
           } else {
             members.forEach(o => { o.set({ selectable: false, isLocked: true }); });
-            // グループ（メンバー2人以上）の場合はバッジを1個だけ、全員を
-            // 囲む範囲にまとめる。単独オブジェクトの場合は従来通り。
-            if (members.length > 1) {
-              createLockBadgeForGroup(members);
-            } else {
-              createLockBadge(obj);
-            }
             canvas.discardActiveObject();
           }
+          // バッジは「特定のバッジだけを個別に消す/作る」のではなく、
+          // 常にキャンバス上の全バッジを消してから今の固定状態を元に
+          // 作り直す。個別追跡だと、何らかの理由でオブジェクト側が持つ
+          // バッジへの参照とキャンバス上の実物がずれた場合に、消したはずの
+          // バッジが取り残されてしまう問題があったため。
+          refreshAllLockBadges();
           updateDeleteButtonState();
           saveState();
         }
@@ -1899,7 +2269,7 @@
         // 代わりに元に戻す(Ctrl+Z)でいつでも復元できることを安全網とする。
         isErasingDrag = true;
         if (target && !isGuideObject(target) && !target.isLocked) {
-          canvas.remove(target);
+          eraseTargetAt(target, canvas.getPointer(evt));
           canvas.renderAll();
           updateDeleteButtonState();
           updateSelectModeIndicator();
@@ -1994,6 +2364,11 @@
         canvas.renderAll();
         updateDeleteButtonState();
         clickCount = 0;
+      } else if (target && target.isConnectorLine && clickCount >= 2) {
+        // 接続線をダブルタップ/ダブルクリックすると、その線の関係ラベル
+        // （文字）を作成／編集する。
+        openConnectorLabelEditor(target);
+        clickCount = 0;
       }
     });
 
@@ -2017,7 +2392,7 @@
       if (isErasingDrag && currentDrawMode === 'eraser') {
         const target = canvas.findTarget(evt, false);
         if (target && !isGuideObject(target) && !target.isLocked) {
-          canvas.remove(target);
+          eraseTargetAt(target, canvas.getPointer(evt));
           canvas.renderAll();
           updateDeleteButtonState();
           updateSelectModeIndicator();
@@ -2126,14 +2501,14 @@
       if (isPanDragging) {
         canvas.setViewportTransform(canvas.viewportTransform);
         isPanDragging = false;
-        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') {
+        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') {
           canvas.isDrawingMode = true;
         }
         canvas.defaultCursor = 'default';
         return;
       }
 
-      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') {
+      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') {
         canvas.isDrawingMode = true;
       }
     });
@@ -2153,7 +2528,7 @@
       if (!isPanDragging) return;
       isPanDragging = false;
       canvas.defaultCursor = 'default';
-      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') {
+      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') {
         canvas.isDrawingMode = true;
       }
     }
@@ -2168,7 +2543,7 @@
     canvas.on('selection:created', onSelection);
     canvas.on('selection:updated', onSelection);
     canvas.on('selection:cleared', function() {
-      if (!isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector') canvas.isDrawingMode = true;
+      if (!isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') canvas.isDrawingMode = true;
       // 注意: ここで removeLockIcon() は呼ばない。
       // ロックアイコン（選択不可のオブジェクト）をタップすると、Fabricは内部処理として
       // 先に「直前の選択」を解除するため、この selection:cleared がアイコンのタップより
@@ -2213,6 +2588,7 @@
     const highlighterModeBtn = document.getElementById('highlighter-mode-btn');
     const eraserModeBtn = document.getElementById('eraser-mode-btn');
     const selectModeBtn = document.getElementById('select-mode-btn');
+    const lassoModeBtn = document.getElementById('lasso-mode-btn');
     const connectorBtn = document.getElementById('connector-btn');
     const connectorTypePopup = document.getElementById('connector-type-popup');
     // #toolbar は角丸表示のため overflow:hidden、さらに backdrop-filter も
@@ -2233,7 +2609,9 @@
     // デフォルトは矢印なし・実線。
     let connectorArrowType = 'none';
     let connectorDashed = false;
+    let connectorRouteType = 'straight'; // 'straight' | 'elbow' | 'bezier'
     const CONNECTOR_ARROW_ICON = { none: '―', end: '→', both: '↔' };
+    const CONNECTOR_ROUTE_ICON = { straight: '', elbow: '⌐', bezier: '〜' };
 
     function updateConnectorTypeUI() {
       connectorTypePopup.querySelectorAll('.connector-type-option[data-group="arrow"]').forEach(btn => {
@@ -2242,8 +2620,12 @@
       connectorTypePopup.querySelectorAll('.connector-type-option[data-group="dash"]').forEach(btn => {
         btn.classList.toggle('selected', btn.dataset.value === (connectorDashed ? 'dashed' : 'solid'));
       });
+      connectorTypePopup.querySelectorAll('.connector-type-option[data-group="route"]').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.value === connectorRouteType);
+      });
       const arrowIcon = CONNECTOR_ARROW_ICON[connectorArrowType] || '―';
-      connectorTypeIndicator.textContent = connectorDashed ? (arrowIcon + '╌') : arrowIcon;
+      const routeIcon = CONNECTOR_ROUTE_ICON[connectorRouteType] || '';
+      connectorTypeIndicator.textContent = (connectorDashed ? (arrowIcon + '╌') : arrowIcon) + routeIcon;
     }
     updateConnectorTypeUI();
 
@@ -2254,10 +2636,12 @@
           connectorArrowType = btn.dataset.value;
         } else if (btn.dataset.group === 'dash') {
           connectorDashed = (btn.dataset.value === 'dashed');
+        } else if (btn.dataset.group === 'route') {
+          connectorRouteType = btn.dataset.value;
         }
         updateConnectorTypeUI();
-        // 矢印・線種は独立した2つの選択なので、片方を選んだだけでは閉じない。
-        // 両方選び終えたら、メニュー外をタップして閉じる（またはコネクタボタンを
+        // 矢印・線種・経路は独立した3つの選択なので、1つ選んだだけでは閉じない。
+        // 選び終えたら、メニュー外をタップして閉じる（またはコネクタボタンを
         // 再度押すとモードごとオフになる）。
       });
     });
@@ -2268,6 +2652,8 @@
       highlighterModeBtn.classList.toggle('active', mode === 'highlighter');
       eraserModeBtn.classList.toggle('active', mode === 'eraser');
       connectorBtn.classList.toggle('active', mode === 'connector');
+      lassoModeBtn.classList.toggle('active', mode === 'lasso');
+      if (mode !== 'eyedropper') upperCanvasEl.style.cursor = '';
       // ペン/マーカー/消しゴムなど明示的なツールを選んだら、選択モードは自動的に解除する
       if (isSelectMode) {
         isSelectMode = false;
@@ -2297,6 +2683,14 @@
         setDrawMode('connector');
         // ONにした直後に線種選択メニューを開き、その場で実線/矢印を選べるようにする
         openFloatingPopup(connectorTypePopup, connectorBtn);
+      }
+    });
+
+    lassoModeBtn.addEventListener('click', () => {
+      if (currentDrawMode === 'lasso') {
+        setDrawMode('pen');
+      } else {
+        setDrawMode('lasso');
       }
     });
 
@@ -2351,7 +2745,7 @@
     function updateSelectModeIndicator() {
       const isActivelySelecting = isSelectMode ||
         isCtrlKeyPhysicallyHeld ||
-        (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector');
+        (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper');
       selectModeBtn.classList.toggle('active', isActivelySelecting);
     }
 
@@ -2377,15 +2771,18 @@
     const undoBtn = document.getElementById('undo-btn');
     const redoBtn = document.getElementById('redo-btn');
 
+    const CANVAS_JSON_EXTRA_PROPS = [
+      'isOriginMark', 'isLocked', 'selectable',
+      'connId', 'isConnectorLine', 'connFromId', 'connToId', 'arrowType',
+      'connRouteType', '_lineId', 'labelForLineId',
+      'groupId'
+    ];
+
     function saveState() {
       if (isHistoryProcessing) return;
       if (historyStep < history.length - 1) history = history.slice(0, historyStep + 1);
 
-      const json = JSON.stringify(canvas.toJSON([
-        'isOriginMark', 'isLocked', 'selectable',
-        'connId', 'isConnectorLine', 'connFromId', 'connToId', 'arrowType',
-        'groupId'
-      ]));
+      const json = JSON.stringify(canvas.toJSON(CANVAS_JSON_EXTRA_PROPS));
       history.push(json);
       if (history.length > MAX_HISTORY) history.shift(); // 上限を超えたら古い履歴から破棄
       historyStep = history.length - 1;
@@ -2514,8 +2911,12 @@
     const bgStyleSelect = document.getElementById('bg-style');
     const paperSizeSelect = document.getElementById('paper-size-select');
     const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+    const duplicateSelectedBtn = document.getElementById('duplicate-selected-btn');
     const groupBtn = document.getElementById('group-btn');
     const ungroupBtn = document.getElementById('ungroup-btn');
+    const alignLeftBtn = document.getElementById('align-left-btn');
+    const ocrBtn = document.getElementById('ocr-btn');
+    const eraserPartialBtn = document.getElementById('eraser-partial-btn');
     const imgFileInput = document.getElementById('img-file-input');
 
     // ============================================================
@@ -2849,6 +3250,13 @@
     }
 
     deleteSelectedBtn.addEventListener('click', deleteSelectedObjects);
+    duplicateSelectedBtn.addEventListener('click', duplicateSelectedObjects);
+    alignLeftBtn.addEventListener('click', alignSelectedObjectsLeft);
+    ocrBtn.addEventListener('click', recognizeSelectedHandwriting);
+    eraserPartialBtn.addEventListener('click', () => {
+      eraserPartialMode = !eraserPartialMode;
+      eraserPartialBtn.classList.toggle('active', eraserPartialMode);
+    });
 
     // --- グループ化 ---
     // 実際にFabricのfabric.Group（要素をキャンバス直下の一覧から
@@ -2969,11 +3377,21 @@
       }
       groupBtn.disabled = !canGroup;
       ungroupBtn.disabled = !canUngroup;
+
+      let canAlignLeft = false;
+      if (active && active.type === 'activeSelection' && active._objects) {
+        const members = active._objects.filter(o => !isGuideObject(o) && !o.isLocked);
+        canAlignLeft = members.length >= 2;
+      }
+      alignLeftBtn.disabled = !canAlignLeft;
     }
 
     function updateDeleteButtonState() {
       const activeObjects = canvas.getActiveObjects().filter(o => !isGuideObject(o));
-      deleteSelectedBtn.disabled = !(activeObjects && activeObjects.length > 0);
+      const hasSelection = !!(activeObjects && activeObjects.length > 0);
+      deleteSelectedBtn.disabled = !hasSelection;
+      duplicateSelectedBtn.disabled = !hasSelection;
+      ocrBtn.disabled = !hasSelection;
       updateGroupButtonState();
     }
 
@@ -3507,6 +3925,7 @@
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelectedObjects(); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') { if (activeObject) { e.preventDefault(); deleteSelectedObjects(); return; } }
       if (e.key === 'Escape' && pendingConnectorSource) { e.preventDefault(); cancelPendingConnectorSelection(); return; }
 
@@ -3922,6 +4341,441 @@
       saveState();
     });
 
+    // ============================================================
+    // 📋 オブジェクトの複製
+    // ============================================================
+    function duplicateSelectedObjects() {
+      const active = canvas.getActiveObject();
+      if (!active) return;
+      const isMulti = active.type === 'activeSelection' && active._objects;
+      const objectsToClone = (isMulti ? active._objects.slice() : [active])
+        .filter(o => !isGuideObject(o) && !o.isConnectorLine && !o.arrowOwnerId && !o.labelForLineId);
+      if (objectsToClone.length === 0) return;
+
+      // 複数選択の場合、discardActiveObject()で各要素のleft/topが
+      // キャンバス絶対座標に復元されてから複製する（ActiveSelection中は
+      // 各要素のleft/topがグループ相対座標になっているため）。
+      canvas.discardActiveObject();
+      canvas.renderAll();
+
+      const OFFSET = 24;
+      const cloned = [];
+      let pending = objectsToClone.length;
+      function finalize() {
+        if (cloned.length === 1) {
+          canvas.setActiveObject(cloned[0]);
+        } else if (cloned.length > 1) {
+          canvas.setActiveObject(new fabric.ActiveSelection(cloned, { canvas }));
+        }
+        refreshAllLockBadges();
+        refreshLabeledShapeHitAreas();
+        canvas.requestRenderAll();
+        updateDeleteButtonState();
+        saveState();
+      }
+      objectsToClone.forEach(obj => {
+        obj.clone((c) => {
+          c.set({
+            left: (obj.left || 0) + OFFSET,
+            top: (obj.top || 0) + OFFSET,
+            isLocked: false, selectable: true, evented: true
+          });
+          // 複製したオブジェクトは、元の接続・グループ・固定状態を引き継がない
+          delete c.connId; delete c.groupId; delete c.lockIconFor; delete c._lockBadge;
+          canvas.add(c);
+          cloned.push(c);
+          pending--;
+          if (pending === 0) finalize();
+        });
+      });
+    }
+
+    // ============================================================
+    // ⬅️ 左揃え整列
+    // ============================================================
+    function alignSelectedObjectsLeft() {
+      const active = canvas.getActiveObject();
+      if (!active || active.type !== 'activeSelection' || !active._objects) return;
+      const members = active._objects.filter(o => !isGuideObject(o) && !o.isLocked && !o.isConnectorLine);
+      if (members.length < 2) return;
+
+      canvas.discardActiveObject(); // 絶対座標に復元
+      canvas.renderAll();
+
+      let minLeft = Infinity;
+      members.forEach(o => {
+        const b = o.getBoundingRect(true, true);
+        if (b.left < minLeft) minLeft = b.left;
+      });
+      members.forEach(o => {
+        const b = o.getBoundingRect(true, true);
+        const dx = minLeft - b.left;
+        if (dx !== 0) {
+          o.set({ left: (o.left || 0) + dx });
+          o.setCoords();
+          updateConnectorLinesFor(o);
+        }
+      });
+      canvas.setActiveObject(new fabric.ActiveSelection(members, { canvas }));
+      canvas.requestRenderAll();
+      saveState();
+    }
+
+    // ============================================================
+    // 🪢 なげなわ選択
+    // ============================================================
+    let lassoPoints = [];
+    let lassoPolyline = null;
+
+    function pointInPolygon(pt, poly) {
+      let inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+        const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+          (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    function handleLassoMouseDown(opt) {
+      const target = opt.target;
+      if (target && target._connTempUnselectable) {
+        target.selectable = true;
+        delete target._connTempUnselectable;
+      }
+      const p = canvas.getPointer(opt.e);
+      lassoPoints = [{ x: p.x, y: p.y }];
+      if (lassoPolyline) { canvas.remove(lassoPolyline); lassoPolyline = null; }
+      lassoPolyline = new fabric.Polyline(lassoPoints, {
+        fill: 'rgba(0,123,255,0.12)', stroke: '#007bff', strokeWidth: Math.max(1, 2 / canvas.getZoom()),
+        strokeDashArray: [6, 4], selectable: false, evented: false, excludeFromExport: true, objectCaching: false
+      });
+      canvas.add(lassoPolyline);
+      canvas.bringToFront(lassoPolyline);
+    }
+
+    function handleLassoMouseMove(opt) {
+      if (!lassoPolyline) return;
+      const p = canvas.getPointer(opt.e);
+      lassoPoints.push({ x: p.x, y: p.y });
+      lassoPolyline.set({ points: lassoPoints.slice() });
+      lassoPolyline.setCoords();
+      canvas.requestRenderAll();
+    }
+
+    function handleLassoMouseUp() {
+      if (!lassoPolyline) return;
+      const poly = lassoPoints;
+      canvas.remove(lassoPolyline);
+      lassoPolyline = null;
+      if (poly.length < 3) { lassoPoints = []; return; }
+
+      const matched = canvas.getObjects().filter(o => {
+        if (isGuideObject(o) || o.isLocked || o.isConnectorLine || o.arrowOwnerId || o.labelForLineId) return false;
+        if (o.selectable === false) return false;
+        const c = o.getCenterPoint();
+        return pointInPolygon(c, poly);
+      });
+      lassoPoints = [];
+      canvas.requestRenderAll();
+      if (matched.length === 0) return;
+
+      canvas.discardActiveObject();
+      if (matched.length === 1) {
+        canvas.setActiveObject(matched[0]);
+      } else {
+        canvas.setActiveObject(new fabric.ActiveSelection(matched, { canvas }));
+      }
+      canvas.requestRenderAll();
+      updateDeleteButtonState();
+      updateSelectModeIndicator();
+    }
+
+    canvas.on('mouse:down', function(opt) {
+      if (currentDrawMode === 'lasso') handleLassoMouseDown(opt);
+    });
+    canvas.on('mouse:move', function(opt) {
+      if (currentDrawMode === 'lasso' && lassoPolyline) handleLassoMouseMove(opt);
+    });
+    canvas.on('mouse:up', function() {
+      if (currentDrawMode === 'lasso') handleLassoMouseUp();
+    });
+
+    // ============================================================
+    // 💧 スポイト（キャンバス上の色を取得）
+    // ============================================================
+    let eyedropperTargetInput = null;
+    let previousDrawModeBeforeEyedropper = null;
+
+    function startEyedropper(targetInput) {
+      eyedropperTargetInput = targetInput;
+      previousDrawModeBeforeEyedropper = currentDrawMode;
+      document.querySelectorAll('.color-popup.open').forEach(p => p.classList.remove('open'));
+      setDrawMode('eyedropper');
+      upperCanvasEl.style.cursor = 'crosshair';
+    }
+
+    document.querySelectorAll('.eyedropper-pick-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const targetId = btn.dataset.target;
+        const input = document.getElementById(targetId);
+        if (input) startEyedropper(input);
+      });
+    });
+
+    function sampleCanvasColorAt(clientX, clientY) {
+      try {
+        const rect = canvas.lowerCanvasEl.getBoundingClientRect();
+        const scaleX = canvas.lowerCanvasEl.width / rect.width;
+        const scaleY = canvas.lowerCanvasEl.height / rect.height;
+        const x = Math.round((clientX - rect.left) * scaleX);
+        const y = Math.round((clientY - rect.top) * scaleY);
+        if (x < 0 || y < 0 || x >= canvas.lowerCanvasEl.width || y >= canvas.lowerCanvasEl.height) return null;
+        const ctx = canvas.lowerCanvasEl.getContext('2d');
+        const data = ctx.getImageData(x, y, 1, 1).data;
+        const toHex = (v) => v.toString(16).padStart(2, '0');
+        return '#' + toHex(data[0]) + toHex(data[1]) + toHex(data[2]);
+      } catch (e) {
+        console.error('スポイトでの色取得に失敗しました:', e);
+        return null;
+      }
+    }
+
+    canvas.on('mouse:down', function(opt) {
+      if (currentDrawMode !== 'eyedropper') return;
+      const evt = opt.e;
+      const clientX = evt.clientX !== undefined ? evt.clientX : (evt.touches && evt.touches[0] && evt.touches[0].clientX);
+      const clientY = evt.clientY !== undefined ? evt.clientY : (evt.touches && evt.touches[0] && evt.touches[0].clientY);
+      const hex = (clientX !== undefined) ? sampleCanvasColorAt(clientX, clientY) : null;
+      if (hex && eyedropperTargetInput) {
+        eyedropperTargetInput.value = hex;
+        eyedropperTargetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      eyedropperTargetInput = null;
+      upperCanvasEl.style.cursor = '';
+      setDrawMode(previousDrawModeBeforeEyedropper || 'pen');
+    });
+
+    // ============================================================
+    // 〰️ 消しゴム（部分消し）
+    // ============================================================
+    let eraserPartialMode = false;
+
+    function getEraserRadius() {
+      return Math.max(14, (parseInt(penWidthInput.value, 10) || 3) * 3);
+    }
+
+    // 手書きの線(fabric.Path)の一部だけを消す。消しゴムの円の内側に入った
+    // 点を取り除き、残った点の「連続したまとまり」ごとに新しい線を作り直す。
+    function partialErasePathAt(pathObj, pt, radius) {
+      const pts = extractPathPoints(pathObj);
+      if (pts.length < 2) { canvas.remove(pathObj); return; }
+
+      const m = pathObj.calcTransformMatrix();
+      const off = pathObj.pathOffset || { x: 0, y: 0 };
+      const abs = pts.map(p => fabric.util.transformPoint({ x: p.x - off.x, y: p.y - off.y }, m));
+
+      const keep = abs.map(p => Math.hypot(p.x - pt.x, p.y - pt.y) > radius);
+      if (keep.every(k => k)) return; // 消しゴムがこの線に実際には触れていない
+
+      const runs = [];
+      let current = [];
+      for (let i = 0; i < abs.length; i++) {
+        if (keep[i]) { current.push(abs[i]); }
+        else { if (current.length >= 2) runs.push(current); current = []; }
+      }
+      if (current.length >= 2) runs.push(current);
+
+      canvas.remove(pathObj);
+      runs.forEach(run => {
+        const d = 'M ' + run.map(p => `${p.x} ${p.y}`).join(' L ');
+        const newPath = new fabric.Path(d, {
+          stroke: pathObj.stroke, strokeWidth: pathObj.strokeWidth,
+          fill: '', strokeLineCap: 'round', strokeLineJoin: 'round',
+          opacity: pathObj.opacity, selectable: pathObj.selectable !== false, evented: true
+        });
+        canvas.add(newPath);
+      });
+    }
+
+    // 消しゴムの実際の消去処理をここに集約する（部分消しON/OFFで分岐）。
+    function eraseTargetAt(target, pointer) {
+      if (eraserPartialMode && target.type === 'path' && !target.isConnectorLine) {
+        partialErasePathAt(target, pointer, getEraserRadius());
+      } else {
+        canvas.remove(target);
+      }
+    }
+
+    // ============================================================
+    // 🔤 手書き文字のテキスト化（OCR、無料のオンラインAPIを使用）
+    // インターネット接続が必要。無料デモキーのため利用回数に上限があり、
+    // 混雑時や1日の上限に達した場合は失敗することがある。
+    // より安定して使いたい場合は https://ocr.space/ocrapi で無料の
+    // 自分専用キーを取得し、下のOCR_API_KEYを書き換えてください。
+    // ============================================================
+    const OCR_API_KEY = 'helloworld';
+
+    function updateOcrAvailability() {
+      if (!navigator.onLine) {
+        ocrBtn.title = '文字認識（インターネット接続が必要です・現在オフラインのため使えません）';
+      } else {
+        ocrBtn.title = '選択した手書き文字をテキストデータに変換します（インターネット接続が必要です）';
+      }
+    }
+    window.addEventListener('online', updateOcrAvailability);
+    window.addEventListener('offline', updateOcrAvailability);
+    updateOcrAvailability();
+
+    async function recognizeSelectedHandwriting() {
+      if (!navigator.onLine) {
+        alert('文字認識にはインターネット接続が必要です。オンラインの状態でもう一度お試しください。');
+        return;
+      }
+      const active = canvas.getActiveObject();
+      const targets = (active && active.type === 'activeSelection' && active._objects)
+        ? active._objects.slice() : (active ? [active] : []);
+      const paths = targets.filter(o => !isGuideObject(o) && !o.isConnectorLine && !o.arrowOwnerId && !o.labelForLineId);
+      if (paths.length === 0) {
+        alert('文字認識したい手書き文字を選択してください。');
+        return;
+      }
+
+      const origLabel = ocrBtn.textContent;
+      ocrBtn.disabled = true;
+      ocrBtn.textContent = '…';
+
+      try {
+        canvas.discardActiveObject();
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        paths.forEach(o => {
+          const b = o.getBoundingRect(true, true);
+          minX = Math.min(minX, b.left); minY = Math.min(minY, b.top);
+          maxX = Math.max(maxX, b.left + b.width); maxY = Math.max(maxY, b.top + b.height);
+        });
+        const pad = 10;
+        const currentVpt = canvas.viewportTransform.slice();
+        const originMark = canvas.getObjects().find(o => o.isOriginMark);
+        if (originMark) originMark.visible = false;
+        const originalBg = canvas.backgroundColor;
+        canvas.backgroundColor = '#ffffff';
+        canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+        canvas.renderAll();
+
+        const dataURL = canvas.toDataURL({
+          format: 'png',
+          left: minX - pad, top: minY - pad,
+          width: (maxX - minX) + pad * 2, height: (maxY - minY) + pad * 2,
+          multiplier: 3
+        });
+
+        canvas.setViewportTransform(currentVpt);
+        if (originMark) originMark.visible = true;
+        canvas.backgroundColor = originalBg;
+        canvas.renderAll();
+
+        const form = new FormData();
+        form.append('apikey', OCR_API_KEY);
+        form.append('language', 'jpn');
+        form.append('OCREngine', '2');
+        form.append('scale', 'true');
+        form.append('base64Image', dataURL);
+
+        const resp = await fetch('https://api.ocr.space/parse/image', { method: 'POST', body: form });
+        if (!resp.ok) throw new Error('通信エラー（' + resp.status + '）');
+        const json = await resp.json();
+        if (json.IsErroredOnProcessing) {
+          const msg = Array.isArray(json.ErrorMessage) ? json.ErrorMessage.join(' ') : json.ErrorMessage;
+          throw new Error(msg || '認識に失敗しました');
+        }
+        const text = ((json.ParsedResults && json.ParsedResults[0] && json.ParsedResults[0].ParsedText) || '').trim();
+        if (!text) {
+          alert('文字を認識できませんでした。もう少しはっきりした文字でお試しください。');
+          return;
+        }
+
+        const textObj = new fabric.IText(text, {
+          left: maxX + 20, top: minY,
+          fontSize: parseInt(fontSizeInput.value, 10) || 22,
+          fill: textColorInput.value, fontFamily: fontSelect.value
+        });
+        canvas.add(textObj);
+        canvas.setActiveObject(textObj);
+        canvas.renderAll();
+        saveState();
+      } catch (err) {
+        console.error('OCRエラー:', err);
+        alert('文字認識に失敗しました。\n\n' + (err && err.message ? err.message : err) +
+          '\n\n※無料APIのため、混雑時や利用回数の上限で失敗することがあります。');
+      } finally {
+        ocrBtn.disabled = false;
+        ocrBtn.textContent = origLabel;
+        updateDeleteButtonState();
+      }
+    }
+
+    // ============================================================
+    // 📤 データ書出 / 📥 データ読込（全ページを1つのファイルにまとめて保存・復元）
+    // ============================================================
+    function flushCurrentPageToPagesData() {
+      pagesData[currentPageIndex] = JSON.stringify(canvas.toJSON(CANVAS_JSON_EXTRA_PROPS));
+    }
+
+    document.getElementById('export-json-btn').addEventListener('click', () => {
+      try {
+        flushCurrentPageToPagesData();
+        const payload = {
+          pentakiExport: true,
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          bgStyle: bgStyleSelect.value,
+          paperSize: paperSizeSelect.value,
+          currentPageIndex,
+          pages: pagesData
+        };
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `pentaki_data_${new Date().toISOString().slice(0, 10)}.json`;
+        link.href = url;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } catch (err) {
+        console.error('データ書き出しエラー:', err);
+        alert('データの書き出し中にエラーが発生しました。\n\n' + (err && err.message ? err.message : err));
+      }
+    });
+
+    document.getElementById('import-json-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (f) => {
+        try {
+          const payload = JSON.parse(f.target.result);
+          if (!payload || !Array.isArray(payload.pages) || payload.pages.length === 0) {
+            alert('このファイルは対応していない形式です。');
+            return;
+          }
+          if (!confirm(`データを読み込みます（${payload.pages.length}ページ）。現在の内容は上書きされます。よろしいですか？`)) return;
+          pendingConnectorSource = null;
+          pagesData = payload.pages;
+          const idx = Math.min(Math.max(payload.currentPageIndex || 0, 0), pagesData.length - 1);
+          if (payload.bgStyle) bgStyleSelect.value = payload.bgStyle;
+          if (payload.paperSize !== undefined) paperSizeSelect.value = payload.paperSize;
+          switchPage(idx);
+          autoSaveLocal();
+        } catch (err) {
+          console.error('データ読み込みエラー:', err);
+          alert('データの読み込みに失敗しました。ファイルが壊れているか、対応していない形式です。');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
     window.addEventListener('resize', () => {
       canvas.setWidth(window.innerWidth);
       canvas.setHeight(window.innerHeight);
@@ -3933,7 +4787,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.159     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.160     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
