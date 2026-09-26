@@ -737,11 +737,29 @@
        position:fixed の基準が viewport ではなく #toolbar になってしまい、
        画面外（切り取られた状態）に隠れてしまうため、意図的に兄弟要素にしている。 -->
   <div class="btn-fixed-right" id="btn-fixed-right">
-    <button id="panel-collapse-btn" class="toggle-btn" style="background:#e2e3e5;" title="右側メニューの表示/折りたたみを切り替え">▦</button>
+    <button id="panel-collapse-btn" class="toggle-btn" style="background:#e2e3e5;" title="右側メニューをたたむ">»</button>
     <button id="delete-selected-btn" class="delete-btn" disabled title="選択オブジェクトを削除">🗑️</button>
-    <button id="duplicate-selected-btn" class="group-btn" disabled title="選択オブジェクトを複製 (Ctrl+D)">📋</button>
-    <button id="group-btn" class="group-btn" disabled title="グループ化（タップ）／テキスト同士なら1つに結合（長押し）">🧩</button>
-    <button id="ungroup-btn" class="group-btn" disabled title="グループ化を解除">✂️</button>
+    <button id="duplicate-selected-btn" class="group-btn" disabled title="選択オブジェクトを複製 (Ctrl+D)">
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="9" y="3" width="12" height="12" rx="2" fill="#ffffff" stroke="#1a1a1a" stroke-width="1.6"></rect>
+        <rect x="3" y="9" width="12" height="12" rx="2" fill="#eef4ff" stroke="#1a1a1a" stroke-width="1.6"></rect>
+      </svg>
+    </button>
+    <button id="group-btn" class="group-btn" disabled title="グループ化（タップ）／テキスト同士なら1つに結合（長押し）">
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="2" y="2" width="20" height="20" rx="3" fill="none" stroke="#1a1a1a" stroke-width="1.4" stroke-dasharray="3 2"></rect>
+        <rect x="5" y="5" width="7" height="7" rx="1.2" fill="#2f6fed"></rect>
+        <circle cx="16.5" cy="16" r="4.2" fill="#ff8a3d"></circle>
+      </svg>
+    </button>
+    <button id="ungroup-btn" class="group-btn" disabled title="グループ化を解除">
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="1" y="4" width="9" height="9" rx="2" fill="none" stroke="#1a1a1a" stroke-width="1.3" stroke-dasharray="2.5 2"></rect>
+        <rect x="3.5" y="6.5" width="4" height="4" rx="0.8" fill="#2f6fed"></rect>
+        <rect x="14" y="11" width="9" height="9" rx="2" fill="none" stroke="#1a1a1a" stroke-width="1.3" stroke-dasharray="2.5 2"></rect>
+        <circle cx="18.5" cy="15.5" r="2.3" fill="#ff8a3d"></circle>
+      </svg>
+    </button>
     <button id="align-left-btn" class="group-btn" disabled title="左揃え（タップ）／縦に詰めて整列（長押し・一番上を基準に隙間なく並べます）">⬅️</button>
     <button id="ocr-btn" class="group-btn" disabled title="選択した手書き文字をテキストデータに変換します（インターネット接続が必要です）">🔤</button>
     <button id="reset-view-btn" class="center-btn" title="初期位置（中央）へ戻す">🎯</button>
@@ -2680,12 +2698,21 @@
       });
     });
 
+    // ペン/マーカー/消しゴム/コネクタの各ボタンは、実際にその描画モードで
+    // 操作できる状態のときだけ「選択中」の色にする。選択モード・画面移動固定中は
+    // 描画はできない状態なので、紛らわしくないようどのツールボタンも光らせない
+    // （選択中であることは selectModeBtn / touchPanLockBtn 側の色で示す）。
+    function refreshToolButtonHighlights() {
+      const suppressed = isSelectMode || isPanLockMode;
+      penModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'pen');
+      highlighterModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'highlighter');
+      eraserModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'eraser');
+      connectorBtn.classList.toggle('active', !suppressed && currentDrawMode === 'connector');
+    }
+
     function setDrawMode(mode) {
       currentDrawMode = mode;
-      penModeBtn.classList.toggle('active', mode === 'pen');
-      highlighterModeBtn.classList.toggle('active', mode === 'highlighter');
-      eraserModeBtn.classList.toggle('active', mode === 'eraser');
-      connectorBtn.classList.toggle('active', mode === 'connector');
+      refreshToolButtonHighlights();
       // なげなわ選択は専用ボタンを持たず「選択」ボタンに統合しているため、
       // 見た目もselectModeBtn側で表現する（ラベル文字とactive状態の両方）。
       selectModeBtn.classList.toggle('active', mode === 'lasso');
@@ -2753,6 +2780,7 @@
         canvas.renderAll();
       }
       selectModeBtn.classList.toggle('active', isSelectMode);
+      refreshToolButtonHighlights();
       applyBrushSettings();
       updateDeleteButtonState();
       updateSelectModeIndicator();
@@ -2776,6 +2804,7 @@
         selectModeBtn.classList.remove('active');
       }
       touchPanLockBtn.classList.toggle('active', isPanLockMode);
+      refreshToolButtonHighlights();
       applyBrushSettings();
       updateSelectModeIndicator();
     });
@@ -3283,7 +3312,13 @@
     function deleteSelectedObjects() {
       const activeObjects = canvas.getActiveObjects();
       if (activeObjects && activeObjects.length > 0) {
-        activeObjects.forEach(obj => { if (!isGuideObject(obj)) canvas.remove(obj); });
+        const affectedGids = new Set();
+        activeObjects.forEach(obj => {
+          if (isGuideObject(obj)) return;
+          if (obj.groupId) affectedGids.add(obj.groupId);
+          canvas.remove(obj);
+        });
+        cleanupOrphanedGroupIds(affectedGids);
         canvas.discardActiveObject();
         canvas.renderAll();
         updateDeleteButtonState();
@@ -3342,13 +3377,53 @@
       return 'grp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
     }
 
+    // グループ(共通groupId)から一部のメンバーが抜けた結果、そのグループに
+    // 1人（または0人）しか残らなかった場合、取り残された側の groupId も
+    // 一緒に消す。これをしないと「実際には相手がいないのに、ボタンの状態
+    // だけはグループ化されている扱いになる」という食い違いが起きる
+    // （例：図形1+図形2をグループ化→図形2+図形3を別グループ化すると、
+    // 図形1がグループの相手を失ったgroupIdを持ったまま取り残されてしまう）。
+    function cleanupOrphanedGroupIds(candidateGids) {
+      candidateGids.forEach(gid => {
+        if (!gid) return;
+        const remaining = canvas.getObjects().filter(o => o.groupId === gid);
+        if (remaining.length < 2) {
+          remaining.forEach(o => { delete o.groupId; });
+        }
+      });
+    }
+
     function groupSelectedObjects() {
       const active = canvas.getActiveObject();
       if (!active || active.type !== 'activeSelection' || !active._objects) return;
-      const members = active._objects.filter(o => !isGuideObject(o));
-      if (members.length < 2) return;
+      const selected = active._objects.filter(o => !isGuideObject(o));
+      if (selected.length < 2) return;
+
+      // 選択した中に、すでに何らかのグループへ入っている図形があった場合、
+      // そのグループの他のメンバー（今回選んでいないものも含む）も
+      // まとめて新しいグループに巻き込む。こうすることで、
+      // 「一部だけ新グループへ移って、残りが相手を失って取り残される」
+      // ことがなくなる（例：図形1+図形2のグループに図形3を追加すると、
+      // 図形1・図形2・図形3すべてが1つの新しいグループになる）。
+      const allMembers = new Set(selected);
+      selected.forEach(o => {
+        if (o.groupId) {
+          canvas.getObjects().forEach(other => {
+            if (other.groupId === o.groupId) allMembers.add(other);
+          });
+        }
+      });
+
       const gid = generateGroupId();
-      members.forEach(o => { o.groupId = gid; });
+      allMembers.forEach(o => { o.groupId = gid; });
+
+      // 巻き込まれた分も含めて、今の選択状態を実際のグループ全員に合わせておく
+      const memberArray = Array.from(allMembers);
+      if (memberArray.length > selected.length) {
+        canvas.discardActiveObject();
+        canvas.setActiveObject(new fabric.ActiveSelection(memberArray, { canvas }));
+      }
+
       updateGroupButtonState();
       canvas.requestRenderAll();
       saveState();
@@ -3363,7 +3438,9 @@
         members = canvas.getObjects().filter(o => o.groupId === active.groupId);
       }
       if (!members.length) return;
-      members.forEach(o => { delete o.groupId; });
+      const affectedGids = new Set();
+      members.forEach(o => { if (o.groupId) affectedGids.add(o.groupId); delete o.groupId; });
+      cleanupOrphanedGroupIds(affectedGids);
       updateGroupButtonState();
       canvas.requestRenderAll();
       saveState();
@@ -5016,18 +5093,27 @@
     }
 
     // ============================================================
-    // ▦ 右側メニューの折りたたみ
+    // »/« 右側メニューの折りたたみ
     // ============================================================
     const panelCollapseBtn = document.getElementById('panel-collapse-btn');
     const btnFixedRight = document.getElementById('btn-fixed-right');
     const PANEL_COLLAPSE_KEY = 'pentaki_panel_collapsed';
+    function updatePanelCollapseIcon() {
+      const collapsed = btnFixedRight.classList.contains('collapsed');
+      // »：これを押すと畳んで右へ隠せる（展開中に表示）
+      // «：これを押すと引き出して展開できる（折りたたみ中に表示）
+      panelCollapseBtn.textContent = collapsed ? '«' : '»';
+      panelCollapseBtn.title = collapsed ? '右側メニューを開く' : '右側メニューをたたむ';
+    }
     try {
       if (localStorage.getItem(PANEL_COLLAPSE_KEY) === '1') {
         btnFixedRight.classList.add('collapsed');
       }
     } catch (e) { /* localStorageが使えない環境では無視 */ }
+    updatePanelCollapseIcon();
     panelCollapseBtn.addEventListener('click', () => {
       const collapsed = btnFixedRight.classList.toggle('collapsed');
+      updatePanelCollapseIcon();
       try { localStorage.setItem(PANEL_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) { /* 無視 */ }
     });
 
@@ -5042,7 +5128,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.162     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.166     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
