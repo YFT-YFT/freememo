@@ -215,6 +215,16 @@
       }
     }
 
+    .btn-fixed-right.collapsed > *:not(#panel-collapse-btn) {
+      display: none !important;
+    }
+    .btn-fixed-right.collapsed {
+      padding: 6px;
+    }
+    #panel-collapse-btn {
+      font-size: 15px;
+    }
+
     .tool-group {
       display: flex;
       align-items: center;
@@ -566,7 +576,7 @@
       <div class="tool-group">
         <button id="pen-mode-btn" class="toggle-btn active" title="標準ペン">✏️</button>
         <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️</button>
-        <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（なぞった部分の要素を消します）">
+        <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（タップ：要素ごと消す／長押し：なぞった部分だけ消す部分消しモードに切替）">
           <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <defs>
               <clipPath id="eraserBodyClip">
@@ -580,9 +590,7 @@
             </g>
           </svg>
         </button>
-        <button id="eraser-partial-btn" class="toggle-btn" title="部分消し ON/OFF（ONのとき、手書き線はなぞった部分だけ消えます。OFFなら要素ごと消えます）" style="font-size:11px;">〰️部分</button>
-        <button id="select-mode-btn" class="toggle-btn" title="選択モード（ONの間、1回のタップ/クリックでオブジェクトを選択・移動できます）">👆 選択</button>
-        <button id="lasso-mode-btn" class="toggle-btn" title="なげなわ選択（ペンで自由に囲んだ内側の要素をまとめて選択します）">🪢 なげなわ</button>
+        <button id="select-mode-btn" class="toggle-btn" title="選択（タップ：選択モードのON/OFF／長押し：自由に囲んで選ぶ「なげなわ選択」に切替）">👆 選択</button>
         <div class="tool-item" style="position:relative;">
           <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップ、または1つ目を押したまま2つ目までドラッグして繋ぐと線で接続します。接続された要素は動かしても線が繋がったままになります。押すとON、もう一度押すとOFFになります）">🔗 コネクタ <span id="connector-type-indicator">―</span></button>
           <div class="color-popup connector-type-popup" id="connector-type-popup">
@@ -728,12 +736,13 @@
        #toolbar内に置くと backdrop-filter + overflow:hidden の影響で
        position:fixed の基準が viewport ではなく #toolbar になってしまい、
        画面外（切り取られた状態）に隠れてしまうため、意図的に兄弟要素にしている。 -->
-  <div class="btn-fixed-right">
+  <div class="btn-fixed-right" id="btn-fixed-right">
+    <button id="panel-collapse-btn" class="toggle-btn" style="background:#e2e3e5;" title="右側メニューの表示/折りたたみを切り替え">▦</button>
     <button id="delete-selected-btn" class="delete-btn" disabled title="選択オブジェクトを削除">🗑️</button>
     <button id="duplicate-selected-btn" class="group-btn" disabled title="選択オブジェクトを複製 (Ctrl+D)">📋</button>
-    <button id="group-btn" class="group-btn" disabled title="選択した複数のオブジェクトをグループ化（以後まとめて選択・移動できます）">🧩</button>
+    <button id="group-btn" class="group-btn" disabled title="グループ化（タップ）／テキスト同士なら1つに結合（長押し）">🧩</button>
     <button id="ungroup-btn" class="group-btn" disabled title="グループ化を解除">✂️</button>
-    <button id="align-left-btn" class="group-btn" disabled title="選択した複数オブジェクトを、一番左にあるものに揃えて整列します">⬅️</button>
+    <button id="align-left-btn" class="group-btn" disabled title="左揃え（タップ）／縦に詰めて整列（長押し・一番上を基準に隙間なく並べます）">⬅️</button>
     <button id="ocr-btn" class="group-btn" disabled title="選択した手書き文字をテキストデータに変換します（インターネット接続が必要です）">🔤</button>
     <button id="reset-view-btn" class="center-btn" title="初期位置（中央）へ戻す">🎯</button>
     <button id="fit-content-btn" class="fit-btn" title="全描画を画面に収める">🔍</button>
@@ -1771,10 +1780,25 @@
       const objB = findObjectByConnId(line.connToId);
       if (!objA || !objB) return line; // 対応する要素が見つからない（削除済み等）場合は何もしない
 
-      const centerA = getConnectorAnchorPoint(objA);
-      const centerB = getConnectorAnchorPoint(objB);
+      let centerA = getConnectorAnchorPoint(objA);
+      let centerB = getConnectorAnchorPoint(objB);
       const rectA = objA.getBoundingRect(true, true); // キャンバス絶対座標での境界
       const rectB = objB.getBoundingRect(true, true);
+
+      // 同じ2つの要素の間に複数のコネクタがある場合、ぴったり重なって
+      // 1本にしか見えなくなってしまうため、connSeq（何本目か）に応じて
+      // 線と垂直な方向へ少しずつ振り分けて表示する（0本目は中央のまま）。
+      const seq = line.connSeq || 0;
+      if (seq !== 0) {
+        const n = Math.ceil(seq / 2);
+        const sign = (seq % 2 === 1) ? 1 : -1;
+        const offset = sign * n * 14;
+        const dx0 = centerB.x - centerA.x, dy0 = centerB.y - centerA.y;
+        const len0 = Math.hypot(dx0, dy0) || 1;
+        const nx0 = -dy0 / len0, ny0 = dx0 / len0;
+        centerA = { x: centerA.x + nx0 * offset, y: centerA.y + ny0 * offset };
+        centerB = { x: centerB.x + nx0 * offset, y: centerB.y + ny0 * offset };
+      }
 
       const pA = getRectEdgePoint(rectA, centerA, centerB);
       const pB = getRectEdgePoint(rectB, centerB, centerA);
@@ -1803,6 +1827,7 @@
         lockMovementX: true, lockMovementY: true, hoverCursor: 'pointer',
         isConnectorLine: true, arrowType: line.arrowType, connRouteType: routeType,
         connFromId: line.connFromId, connToId: line.connToId, _lineId: line._lineId,
+        connSeq: line.connSeq || 0,
         objectCaching: false
       };
       line._isInternalRebuild = true; // 直角/曲線ルートの作り直しに伴う一時的な削除であることの目印
@@ -1876,6 +1901,13 @@
       const color = penColorInput.value;
       const routeType = connectorRouteType;
 
+      // 既にこの2つの要素間に接続線が何本あるかを数え、何本目かを記録しておく
+      // （複数本を少しずつ位置をずらして表示するための番号。refreshConnectorLine内で使う）。
+      const seq = canvas.getObjects().filter(o => o.isConnectorLine &&
+        ((o.connFromId === objA.connId && o.connToId === objB.connId) ||
+         (o.connFromId === objB.connId && o.connToId === objA.connId))
+      ).length;
+
       let line;
       if (routeType === 'straight') {
         line = new fabric.Line([0, 0, 0, 0], {
@@ -1894,7 +1926,8 @@
           arrowType: arrowType,
           connRouteType: 'straight',
           connFromId: objA.connId,
-          connToId: objB.connId
+          connToId: objB.connId,
+          connSeq: seq
         });
       } else {
         // 直角/曲線ルートは fabric.Path として表現する（refreshConnectorLine内で
@@ -1915,6 +1948,7 @@
           connRouteType: routeType,
           connFromId: objA.connId,
           connToId: objB.connId,
+          connSeq: seq,
           objectCaching: false
         });
       }
@@ -2588,7 +2622,7 @@
     const highlighterModeBtn = document.getElementById('highlighter-mode-btn');
     const eraserModeBtn = document.getElementById('eraser-mode-btn');
     const selectModeBtn = document.getElementById('select-mode-btn');
-    const lassoModeBtn = document.getElementById('lasso-mode-btn');
+    // （なげなわ選択は「選択」ボタンの長押しに統合したため、専用ボタンは廃止）
     const connectorBtn = document.getElementById('connector-btn');
     const connectorTypePopup = document.getElementById('connector-type-popup');
     // #toolbar は角丸表示のため overflow:hidden、さらに backdrop-filter も
@@ -2652,7 +2686,10 @@
       highlighterModeBtn.classList.toggle('active', mode === 'highlighter');
       eraserModeBtn.classList.toggle('active', mode === 'eraser');
       connectorBtn.classList.toggle('active', mode === 'connector');
-      lassoModeBtn.classList.toggle('active', mode === 'lasso');
+      // なげなわ選択は専用ボタンを持たず「選択」ボタンに統合しているため、
+      // 見た目もselectModeBtn側で表現する（ラベル文字とactive状態の両方）。
+      selectModeBtn.classList.toggle('active', mode === 'lasso');
+      selectModeBtn.textContent = (mode === 'lasso') ? '🪢 なげなわ' : '👆 選択';
       if (mode !== 'eyedropper') upperCanvasEl.style.cursor = '';
       // ペン/マーカー/消しゴムなど明示的なツールを選んだら、選択モードは自動的に解除する
       if (isSelectMode) {
@@ -2671,7 +2708,6 @@
 
     penModeBtn.addEventListener('click', () => setDrawMode('pen'));
     highlighterModeBtn.addEventListener('click', () => setDrawMode('highlighter'));
-    eraserModeBtn.addEventListener('click', () => setDrawMode('eraser'));
     connectorBtn.addEventListener('click', () => {
       // コネクタモード中にもう一度押した場合は解除（ペンモードへ戻す）。
       // 以前は常に setDrawMode('connector') を呼ぶだけだったため、
@@ -2686,19 +2722,15 @@
       }
     });
 
-    lassoModeBtn.addEventListener('click', () => {
-      if (currentDrawMode === 'lasso') {
-        setDrawMode('pen');
-      } else {
-        setDrawMode('lasso');
-      }
-    });
+    // （なげなわモードの切替は selectModeBtn の長押しハンドラ側に統合）
 
     // --- 選択モード（トグルボタン） ---
     // ONの間は常に isDrawingMode=false になり、1回のタップ/クリックで
     // オブジェクトの選択・移動ができる。もう一度ボタンを押すか、
     // 何もない場所をダブルタップ/ダブルクリックすると描画モードに戻る。
-    selectModeBtn.addEventListener('click', () => {
+    // （長押しすると「なげなわ選択」モードに切り替わる。ボタンを増やさずに
+    // 済むよう、tapとholdの2種類のジェスチャーを同じボタンに割り当てている）
+    function selectModeTap() {
       const turningOn = !isSelectMode;
       // コネクタモード中に選択モードをONにすると、currentDrawMode が
       // 'connector' のまま残ってしまい、タップしたつもりが接続操作として
@@ -2724,7 +2756,17 @@
       applyBrushSettings();
       updateDeleteButtonState();
       updateSelectModeIndicator();
-    });
+    }
+
+    function selectModeHold() {
+      if (currentDrawMode === 'lasso') {
+        setDrawMode('pen');
+      } else {
+        setDrawMode('lasso');
+      }
+    }
+
+    attachTapHold(selectModeBtn, { onTap: selectModeTap, onHold: selectModeHold });
 
     touchPanLockBtn.addEventListener('click', () => {
       isPanLockMode = !isPanLockMode;
@@ -2744,6 +2786,7 @@
     // 同じボタンを光らせて「今は選択できる状態です」とわかりやすくする。
     function updateSelectModeIndicator() {
       const isActivelySelecting = isSelectMode ||
+        currentDrawMode === 'lasso' ||
         isCtrlKeyPhysicallyHeld ||
         (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper');
       selectModeBtn.classList.toggle('active', isActivelySelecting);
@@ -2774,7 +2817,7 @@
     const CANVAS_JSON_EXTRA_PROPS = [
       'isOriginMark', 'isLocked', 'selectable',
       'connId', 'isConnectorLine', 'connFromId', 'connToId', 'arrowType',
-      'connRouteType', '_lineId', 'labelForLineId',
+      'connRouteType', '_lineId', 'labelForLineId', 'connSeq',
       'groupId'
     ];
 
@@ -2916,7 +2959,7 @@
     const ungroupBtn = document.getElementById('ungroup-btn');
     const alignLeftBtn = document.getElementById('align-left-btn');
     const ocrBtn = document.getElementById('ocr-btn');
-    const eraserPartialBtn = document.getElementById('eraser-partial-btn');
+    // （部分消しの切替は eraser-mode-btn の長押しハンドラ側に統合したため、専用ボタンは廃止）
     const imgFileInput = document.getElementById('img-file-input');
 
     // ============================================================
@@ -3251,12 +3294,9 @@
 
     deleteSelectedBtn.addEventListener('click', deleteSelectedObjects);
     duplicateSelectedBtn.addEventListener('click', duplicateSelectedObjects);
-    alignLeftBtn.addEventListener('click', alignSelectedObjectsLeft);
+    attachTapHold(alignLeftBtn, { onTap: alignSelectedObjectsLeft, onHold: stackSelectedObjectsVertically });
     ocrBtn.addEventListener('click', recognizeSelectedHandwriting);
-    eraserPartialBtn.addEventListener('click', () => {
-      eraserPartialMode = !eraserPartialMode;
-      eraserPartialBtn.classList.toggle('active', eraserPartialMode);
-    });
+    attachTapHold(eraserModeBtn, { onTap: eraserModeTap, onHold: eraserModeHold });
 
     // --- グループ化 ---
     // 実際にFabricのfabric.Group（要素をキャンバス直下の一覧から
@@ -3329,7 +3369,7 @@
       saveState();
     }
 
-    groupBtn.addEventListener('click', groupSelectedObjects);
+    attachTapHold(groupBtn, { onTap: groupSelectedObjects, onHold: mergeSelectedTextObjects });
     ungroupBtn.addEventListener('click', ungroupSelectedObjects);
 
     // 選択中の1つが groupId を持っていた場合、自動的に同じgroupIdの
@@ -3992,6 +4032,9 @@
     // グループ化と同じ仕組み(共通groupId)で結び付け、以後どちらかを動かすと
     // 一緒に付いてくるようにする。
     function createNewTextBox(x, y, options) {
+      // テキスト作成（＝文字入力モードに入る）ときは、消しゴムモードのままだと
+      // 紛らわしいので自動的にペンモードへ戻す。
+      if (currentDrawMode === 'eraser') setDrawMode('pen');
       options = options || {};
       const centered = !!options.centered;
       const text = new fabric.IText('', {
@@ -4776,6 +4819,218 @@
       e.target.value = '';
     });
 
+    // ============================================================
+    // 🖱️ タップ/長押し 共通ヘルパー
+    // ツールバーのボタン数を増やさずに機能を追加するため、
+    // 「タップ」と「長押し（約0.55秒）」で別々の動作を割り当てられるようにする。
+    // ============================================================
+    function attachTapHold(el, opts) {
+      const onTap = opts.onTap || function() {};
+      const onHold = opts.onHold || function() {};
+      const holdMs = opts.holdMs || 550;
+      const moveTolerance = opts.moveTolerance || 12;
+      let timer = null;
+      let suppressClick = false;
+      let startX = 0, startY = 0;
+
+      function getPos(e) {
+        if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        return { x: e.clientX, y: e.clientY };
+      }
+      function start(e) {
+        const p = getPos(e);
+        startX = p.x; startY = p.y;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          timer = null;
+          suppressClick = true;
+          if (navigator.vibrate) navigator.vibrate(15);
+          onHold();
+        }, holdMs);
+      }
+      function move(e) {
+        if (!timer) return;
+        const p = getPos(e);
+        if (Math.abs(p.x - startX) > moveTolerance || Math.abs(p.y - startY) > moveTolerance) {
+          clearTimeout(timer); timer = null;
+        }
+      }
+      function cancel() {
+        if (timer) { clearTimeout(timer); timer = null; }
+      }
+      function onClickEvt(e) {
+        if (suppressClick) {
+          suppressClick = false;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        onTap();
+      }
+      if (window.PointerEvent) {
+        el.addEventListener('pointerdown', start);
+        el.addEventListener('pointermove', move);
+        el.addEventListener('pointerup', cancel);
+        el.addEventListener('pointercancel', cancel);
+        el.addEventListener('pointerleave', cancel);
+      } else {
+        el.addEventListener('touchstart', start, { passive: true });
+        el.addEventListener('touchmove', move, { passive: true });
+        el.addEventListener('touchend', cancel);
+        el.addEventListener('touchcancel', cancel);
+        el.addEventListener('mousedown', start);
+        el.addEventListener('mouseup', cancel);
+        el.addEventListener('mouseleave', cancel);
+      }
+      el.addEventListener('click', onClickEvt);
+    }
+
+    // ============================================================
+    // 消しゴムボタン：タップ＝要素ごと消す/OFF切替、長押し＝部分消しに切替
+    // ============================================================
+    const ERASER_ICON_WHOLE = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <defs><clipPath id="eraserBodyClipW"><rect x="3" y="7" width="18" height="10" rx="2"></rect></clipPath></defs>
+      <g transform="rotate(-20 12 12)">
+        <rect x="3" y="7" width="18" height="10" rx="2" fill="#fbfbf8"></rect>
+        <rect x="3" y="7" width="18" height="4" fill="#2f6fed" clip-path="url(#eraserBodyClipW)"></rect>
+        <rect x="3" y="7" width="18" height="10" rx="2" fill="none" stroke="#1a1a1a" stroke-width="1.1"></rect>
+      </g></svg>`;
+    const ERASER_ICON_PARTIAL = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <defs><clipPath id="eraserBodyClipP"><rect x="3" y="7" width="18" height="10" rx="2"></rect></clipPath></defs>
+      <g transform="rotate(-20 12 12)">
+        <rect x="3" y="7" width="18" height="10" rx="2" fill="#fbfbf8"></rect>
+        <rect x="3" y="7" width="18" height="4" fill="#ff8a3d" clip-path="url(#eraserBodyClipP)"></rect>
+        <rect x="3" y="7" width="18" height="10" rx="2" fill="none" stroke="#1a1a1a" stroke-width="1.1"></rect>
+      </g>
+      <circle cx="19" cy="18.5" r="1.4" fill="#ff8a3d"></circle>
+      <circle cx="14.5" cy="20.5" r="1.4" fill="#ff8a3d"></circle>
+      <circle cx="21" cy="21.5" r="1.1" fill="#ff8a3d"></circle>
+    </svg>`;
+    function updateEraserIcon() {
+      eraserModeBtn.innerHTML = eraserPartialMode ? ERASER_ICON_PARTIAL : ERASER_ICON_WHOLE;
+      eraserModeBtn.title = eraserPartialMode
+        ? '消しゴム：部分消しモード（手書き線のなぞった部分だけ消えます／タップでOFF、長押しで全体消去モードへ）'
+        : '消しゴム（タップ：要素ごと消す／長押し：なぞった部分だけ消す部分消しモードに切替）';
+    }
+    function eraserModeTap() {
+      if (currentDrawMode === 'eraser') {
+        setDrawMode('pen');
+      } else {
+        eraserPartialMode = false;
+        setDrawMode('eraser');
+      }
+      updateEraserIcon();
+    }
+    function eraserModeHold() {
+      if (currentDrawMode === 'eraser' && eraserPartialMode) {
+        setDrawMode('pen');
+      } else {
+        eraserPartialMode = true;
+        setDrawMode('eraser');
+      }
+      updateEraserIcon();
+    }
+
+    // ============================================================
+    // ⬅️ 左揃えボタンの長押し：一番上のオブジェクトを基準に、
+    // 左揃え＋縦に隙間なく詰めて並べる（散らばったテキストの整理に便利）
+    // ============================================================
+    function stackSelectedObjectsVertically() {
+      const active = canvas.getActiveObject();
+      if (!active || active.type !== 'activeSelection' || !active._objects) return;
+      const members = active._objects.filter(o => !isGuideObject(o) && !o.isLocked && !o.isConnectorLine);
+      if (members.length < 2) return;
+
+      canvas.discardActiveObject();
+      canvas.renderAll();
+
+      const sorted = members.slice().sort((a, b) =>
+        a.getBoundingRect(true, true).top - b.getBoundingRect(true, true).top
+      );
+      let minLeft = Infinity;
+      sorted.forEach(o => {
+        const b = o.getBoundingRect(true, true);
+        if (b.left < minLeft) minLeft = b.left;
+      });
+
+      const GAP = 6;
+      let cursorTop = sorted[0].getBoundingRect(true, true).top;
+      sorted.forEach(o => {
+        const b = o.getBoundingRect(true, true);
+        const dxLeft = minLeft - b.left;
+        const dyTop = cursorTop - b.top;
+        if (dxLeft !== 0 || dyTop !== 0) {
+          o.set({ left: (o.left || 0) + dxLeft, top: (o.top || 0) + dyTop });
+          o.setCoords();
+          updateConnectorLinesFor(o);
+        }
+        cursorTop += b.height + GAP;
+      });
+
+      canvas.setActiveObject(new fabric.ActiveSelection(sorted, { canvas }));
+      canvas.requestRenderAll();
+      saveState();
+    }
+
+    // ============================================================
+    // 🧩 グループ化ボタンの長押し：選択したテキスト同士を1つのテキストに結合する
+    // ============================================================
+    function mergeSelectedTextObjects() {
+      const active = canvas.getActiveObject();
+      if (!active || active.type !== 'activeSelection' || !active._objects) return;
+      const members = active._objects.filter(o => !isGuideObject(o) && !o.isConnectorLine);
+      if (members.length < 2) return;
+      const allText = members.every(o => o.type === 'i-text' || o.type === 'text' || o.type === 'textbox');
+      if (!allText) {
+        alert('結合できるのは、テキスト同士の組み合わせのときだけです。');
+        return;
+      }
+
+      canvas.discardActiveObject();
+      canvas.renderAll();
+
+      // 上から下、近い高さのものは左から右の順に並べ替えてから結合する
+      const sorted = members.slice().sort((a, b) => {
+        const ab = a.getBoundingRect(true, true), bb = b.getBoundingRect(true, true);
+        if (Math.abs(ab.top - bb.top) > Math.min(ab.height, bb.height) * 0.5) return ab.top - bb.top;
+        return ab.left - bb.left;
+      });
+
+      const combinedText = sorted.map(o => o.text || '').join('\n');
+      const first = sorted[0];
+      const b0 = first.getBoundingRect(true, true);
+
+      const merged = new fabric.IText(combinedText, {
+        left: b0.left, top: b0.top,
+        fontSize: first.fontSize || 22,
+        fill: first.fill || '#222222',
+        fontFamily: first.fontFamily || fontSelect.value
+      });
+
+      sorted.forEach(o => canvas.remove(o));
+      canvas.add(merged);
+      canvas.setActiveObject(merged);
+      canvas.requestRenderAll();
+      updateDeleteButtonState();
+      saveState();
+    }
+
+    // ============================================================
+    // ▦ 右側メニューの折りたたみ
+    // ============================================================
+    const panelCollapseBtn = document.getElementById('panel-collapse-btn');
+    const btnFixedRight = document.getElementById('btn-fixed-right');
+    const PANEL_COLLAPSE_KEY = 'pentaki_panel_collapsed';
+    try {
+      if (localStorage.getItem(PANEL_COLLAPSE_KEY) === '1') {
+        btnFixedRight.classList.add('collapsed');
+      }
+    } catch (e) { /* localStorageが使えない環境では無視 */ }
+    panelCollapseBtn.addEventListener('click', () => {
+      const collapsed = btnFixedRight.classList.toggle('collapsed');
+      try { localStorage.setItem(PANEL_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) { /* 無視 */ }
+    });
+
     window.addEventListener('resize', () => {
       canvas.setWidth(window.innerWidth);
       canvas.setHeight(window.innerHeight);
@@ -4787,7 +5042,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.160     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.162     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
