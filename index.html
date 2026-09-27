@@ -576,6 +576,7 @@
       <div class="tool-group">
         <button id="pen-mode-btn" class="toggle-btn active" title="標準ペン">✏️</button>
         <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️</button>
+        <button id="laser-mode-btn" class="toggle-btn" title="一時描画ペン（レーザーポインター風。描いた線が少し経つと自動的に消えます。画面共有や説明でここを指し示すのに便利です）">🔴 レーザー</button>
         <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（タップ：要素ごと消す／長押し：なぞった部分だけ消す部分消しモードに切替）">
           <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <defs>
@@ -616,6 +617,7 @@
             </div>
           </div>
         </div>
+        <button id="mask-mode-btn" class="toggle-btn" title="暗記マスク（赤シート風）：ドラッグした範囲を覆い隠します。選択モード中などにマスクをタップすると表示/非表示が切り替わります（暗記カード・穴埋めクイズに）">🟥 マスク</button>
       </div>
 
       <!-- 2. ペン設定（直前の描画ツールに直結する設定） -->
@@ -643,6 +645,32 @@
           🖼️ 挿入
           <input type="file" id="img-file-input" accept="image/*,application/pdf">
         </label>
+        <div class="tool-item" style="position:relative;">
+          <button id="insert-shape-btn" title="図形を挿入（四角・丸・三角・ひし形・矢印など、考えを整理するのに使える簡易図形）">🔷 図形</button>
+          <div class="color-popup" id="insert-shape-popup">
+            <div class="connector-type-row">
+              <button type="button" class="shape-insert-option" data-shape="rect" title="四角形">▭</button>
+              <button type="button" class="shape-insert-option" data-shape="ellipse" title="円・楕円">◯</button>
+              <button type="button" class="shape-insert-option" data-shape="triangle" title="三角形">△</button>
+              <button type="button" class="shape-insert-option" data-shape="diamond" title="ひし形">◇</button>
+              <button type="button" class="shape-insert-option" data-shape="arrow" title="矢印">➜</button>
+            </div>
+          </div>
+        </div>
+        <div class="tool-item" style="position:relative;">
+          <button id="insert-table-btn" title="表（テーブル）を挿入">▦ 表</button>
+          <div class="color-popup" id="insert-table-popup">
+            <div style="display:flex; flex-direction:column; gap:8px; padding:6px; min-width:140px;">
+              <label style="font-size:12px; display:flex; justify-content:space-between; align-items:center;">行数
+                <input type="number" id="table-rows-input" min="1" max="20" value="3" style="width:56px;">
+              </label>
+              <label style="font-size:12px; display:flex; justify-content:space-between; align-items:center;">列数
+                <input type="number" id="table-cols-input" min="1" max="10" value="3" style="width:56px;">
+              </label>
+              <button type="button" id="table-insert-confirm-btn">この表を挿入</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 4. テキスト設定 -->
@@ -674,6 +702,18 @@
 
       <!-- 5. 画面・背景（キャンバス全体の見え方に関する設定） -->
       <div class="tool-group">
+        <div class="tool-item" title="背景パターン（印刷・PDF/PNG出力にもそのまま残ります）">
+          <span>罫線:</span>
+          <select id="bg-pattern-select">
+            <option value="grid">方眼（デフォルト）</option>
+            <option value="none">なし（無地）</option>
+            <option value="lines-h">横罫線</option>
+            <option value="lines-v">縦罫線</option>
+            <option value="staff">五線譜</option>
+            <option value="english4">英語4線</option>
+            <option value="cabinet">キャビネット図用（三角格子）</option>
+          </select>
+        </div>
         <div class="tool-item" title="背景色（場面に応じて選んでください）">
           <span>背景:</span>
           <select id="bg-style">
@@ -709,6 +749,7 @@
           <span id="page-num-display" style="font-size:11px; font-weight:bold; padding:0 2px;">1/1</span>
           <button id="next-page-btn" class="step-btn" title="次ページ">▶</button>
           <button id="add-page-btn" class="step-btn" title="新規ページ追加">＋</button>
+          <button id="duplicate-page-btn" class="step-btn" title="このページを複製（同じ内容のページをすぐ後ろに追加します）">⧉</button>
           <button id="delete-page-btn" class="step-btn" title="ページ削除" style="color: #dc3545;">− </button>
         </div>
       </div>
@@ -784,25 +825,61 @@
         <h4>✏️ 基本の書き込み方法</h4>
         <ul>
           <li><b>手書き（ペン・マーカー）</b>: 画面上をドラッグ（指やペンでなぞる）すると、いつでも自由に手書きができます。上部メニューで線の「色」や「太さ」を自由に調整できます。</li>
-          <li><b>図形として自動整形</b>: 標準ペンで直線・円・四角形・三角形・五角形などに近い形を描き、描き終わりの位置でペンを画面につけたまま約1秒保持してから離すと、自動できれいな図形に変換されます（判定に自信が持てない場合は手書きのまま残ります）。保持せずすぐ離した場合は図形化を試みないため、ひらがとなど手書き文字が誤って図形化されにくくなっています。多角形にしたい場合は、角にしたい場所で0.1〜0.2秒ほど止まりながら描くと認識しやすくなります。閉じきっていなくても「閉じようとしている」形であれば認識されます。</li>
+          <li><b>図形として自動整形</b>: 標準ペンで直線・円・四角形・三角形・五角形・波線などに近い形を描き、描き終わりの位置でペンを画面につけたまま約1秒保持してから離すと、自動できれいな図形に変換されます（判定に自信が持てない場合は手書きのまま残ります）。保持せずすぐ離した場合は図形化を試みないため、ひらがなど手書き文字が誤って図形化されにくくなっています。多角形にしたい場合は、角にしたい場所で0.1〜0.2秒ほど止まりながら描くと認識しやすくなります。閉じきっていなくても「閉じようとしている」形であれば認識されます。波線（ジグザグに波打った線）も、下線や強調の装飾として同じ操作できれいに整形されます。</li>
           <li><b>キーボードで文字入力</b>: 画面上の入力したい場所を<b>ダブルクリック（またはダブルタップ）</b>すると、その場所に文字を入力できます。フォントやサイズ、文字色の変更も可能です。図形（手書きの線・変換後の四角/丸など）の真上でダブルタップした場合は、図形の中央に文字が入り、その図形と自動的にグループ化されるので、以後は図形を動かすと文字も一緒に付いてきます。</li>
-          <li><b>🎨 色選び</b>: 「色」の丸いボタンを押すと、よく使う8色をワンタップで選べるパレットが開きます（選ぶと即座に閉じます）。パレットにない色が欲しいときは「🎨 もっと見る…」から、これまで通りの詳細なカラーピッカーを開けます。</li>
+          <li><b>🎨 色選び</b>: 「色」の丸いボタンを押すと、よく使う8色をワンタップで選べるパレットが開きます（選ぶと即座に閉じます）。パレットにない色が欲しいときは「🎨 もっと見る…」から詳細なカラーピッカーを開けます。「💧 キャンバスから色を取得」を押すと、続けてキャンバス上の画像・手書き線・背景など好きな場所をタップするだけで、その色をペン色/文字色として取り込めます（スポイト機能）。</li>
           <li><b>選択中の図形の色を変える</b>: 手書き線・図形・コネクタ線などを選択した状態で「ペンの色」を選ぶと、これから描く線の色だけでなく、選択中の図形自体の色もその場で変わります（文字の色は「文字色」ピッカーで個別に変更してください）。選択すると、ペンの色スウォッチはその図形の現在の色に自動で切り替わります。</li>
+          <li><b>🔤 手書き文字のテキスト化（文字認識）</b>: 手書きの文字を選択して右側の「🔤」ボタンを押すと、無料のオンラインAPIを使って文字データ（テキスト）に変換します。元の手書きとほぼ同じ場所・同じくらいの大きさにテキストが置き換わり、元の手書き線は削除されるので、手書きがそのままテキストに変わったように見えます。インターネット接続が必要で、無料APIのため混雑時は失敗することがあります。</li>
         </ul>
       </div>
 
       <div class="modal-section">
-        <h4>👆 オブジェクトの選択・移動・削除</h4>
+        <h4>👆 選択・移動・削除・整列・複製</h4>
         <ul>
-          <li><b>選択モードボタン</b>: メニューの「👆 選択」を押すとON。ONの間は1回のタップ/クリックだけで手書き線・文字・画像を選択でき、そのままドラッグで移動できます。もう一度押すか、何もない場所をダブルタップ/ダブルクリックすると描画モードに戻ります。</li>
-          <li><b>グループ化</b>: 選択モードで何もない場所からドラッグして複数のオブジェクトをまとめて選択し、右側の🧩ボタンを押すとグループ化されます。以後はグループ内のどれか1つをタップするだけで全員がまとめて選択され、一緒に移動できます。✂️ボタンでグループ解除できます。</li>
+          <li><b>選択モードボタン</b>: メニューの「👆 選択」を<b>タップ</b>するとON。ONの間は1回のタップ/クリックだけで手書き線・文字・画像を選択でき、そのままドラッグで移動できます。もう一度押すか、何もない場所をダブルタップ/ダブルクリックすると描画モードに戻ります。</li>
+          <li><b>🪢 なげなわ選択</b>: 「👆 選択」ボタンを<b>長押し</b>すると「🪢 なげなわ」モードに切り替わります。ペンで自由な形に囲むと、その内側にある要素をまとめて選択できます。もう一度長押しするか、他のツールを選ぶと解除されます。</li>
+          <li><b>複製</b>: オブジェクトを選択して右側の「📋（重なった四角のアイコン）」ボタン、またはキーボードの <b>Ctrl + D</b> で、少しずらした位置にコピーを作れます。</li>
+          <li><b>グループ化 / 結合</b>: 複数のオブジェクトをまとめて選択し、右側の🧩（点線の枠に図形が入ったアイコン）ボタンを<b>タップ</b>するとグループ化されます。以後はグループ内のどれか1つをタップするだけで全員がまとめて選択され、一緒に移動できます。同じ🧩ボタンを<b>長押し</b>すると、選択中のテキスト同士を1つのテキストに結合できます（バラバラに散らばったテキストを1つにまとめたいときに便利）。✂️ボタンでグループ解除できます。一部だけ別のグループへ移した場合でも、相手を失った側は自動的に未グループ扱いに整理されます。</li>
+          <li><b>整列</b>: 複数選択した状態で右側の「⬅️」ボタンを<b>タップ</b>すると、一番左のオブジェクトに揃えて左揃えになります。同じボタンを<b>長押し</b>すると、一番上のオブジェクトを基準に、左揃え＋縦に隙間なく詰めて並び替わります（散らばったテキストの整理に便利）。</li>
+          <li><b>🧲 スナップ吸着ガイド</b>: オブジェクトを移動すると、他のオブジェクトの端・中心や背景の方眼の格子に近づいた時、ピンク色の補助線が表示されてピタッと揃います。</li>
           <li><b>固定（ロック）</b>: 長押しで要素を選択すると、その近くに🔒マークが表示されます。タップすると、その要素だけ移動・選択ができないよう固定され、固定中は左上に小さな🔒バッジが常に表示されます（画像や図形への書き込みが見づらくならないよう、不透明度は変えません）。固定された要素を再び長押しすると、今度は🔓マークが表示され、タップで固定解除できます。取り込んだ画像などを誤って動かしたくないときに便利です。選択モード中でも長押しで固定・固定解除できます。</li>
           <li><b>長押し（約0.7秒）</b>: キーボードがない端末でも、選択したい対象を指で押さえたまま少し待つと選択できます（対応端末では振動でお知らせします）。指を離した後、改めてドラッグすると移動できます。</li>
           <li><b>Ctrl（Macは⌘）+ クリック/ドラッグ</b>: パソコンで、押している間だけ選択モードとして扱われます。</li>
           <li><b>削除</b>: 選択した状態で「🗑️」ボタン、またはキーボードの Delete / Backspace で削除できます。</li>
-          <li><b>🔗 コネクタ</b>: メニューの「🔗 コネクタ」を押すとON、もう一度押すとOFF（ペンモードに戻ります）。線でつなぎたい2つの要素（手書き・文字・画像・図形）を、<b>①順にタップ</b>するか、<b>②1つ目を押したまま指/マウスを離さずに2つ目までドラッグ</b>すると、それぞれの図形の縁まで伸びる線が引かれます（図形の内側を突き抜けないよう、中心ではなく輪郭に接続されます）。1つ目に触れるとオレンジ色になり選択中を示し、ドラッグ中は破線のプレビュー線がポインタまで伸び、選んでいる矢印の種類も連動して表示されます。有効な繋ぎ先の上まで来るとその要素もオレンジ色になり、そこで離すと接続されます。同じ要素をもう一度タップ、何もない場所をタップ、またはEscキーで選択を取り消せます。つないだあとに要素を動かすと、線も自動的に追従します。要素を削除すると、それにつながっていた線も一緒に消えます。</li>
-          <li><b>🔗 コネクタの見た目と色</b>: 「🔗 コネクタ」ボタンをONにすると選択メニューがその場で開きます。「矢印」（なし／片側／両側）と「線種」（実線／破線、デフォルトは実線）はそれぞれ独立して選べます。選んだ内容はボタン横の記号（例：「→」＝片側矢印の実線、「↔╌」＝両側矢印の破線）で確認できます。メニュー外をタップすると閉じます（作成後の変更はできません）。線の色は、その時点で「✏️ 色」に設定されている色が使われます。</li>
-          <li><b>🔗 コネクタ－注意点</b>: 手書きの線などナナメに傾いた図形の場合、接続点は図形を囲む長方形（バウンディングボックス）の縁を基準に計算されるため、見た目の輪郭と数ピクセルずれることがあります。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>🔗 コネクタ（要素同士をつなぐ線）</h4>
+        <ul>
+          <li><b>つなぎ方</b>: メニューの「🔗 コネクタ」を押すとON、もう一度押すとOFF（ペンモードに戻ります）。線でつなぎたい2つの要素（手書き・文字・画像・図形）を、<b>①順にタップ</b>するか、<b>②1つ目を押したまま指/マウスを離さずに2つ目までドラッグ</b>すると、それぞれの図形の縁まで伸びる線が引かれます（図形の内側を突き抜けないよう、中心ではなく輪郭に接続されます）。1つ目に触れるとオレンジ色になり選択中を示し、ドラッグ中は破線のプレビュー線がポインタまで伸びます。有効な繋ぎ先の上まで来るとその要素もオレンジ色になり、そこで離すと接続されます。同じ要素をもう一度タップ、何もない場所をタップ、またはEscキーで選択を取り消せます。つないだあとに要素を動かすと、線も自動的に追従します。要素を削除すると、それにつながっていた線も一緒に消えます。同じ2つの要素の間に複数の接続線を作ると、重ならないよう自動的に少しずつ位置をずらして表示されます。</li>
+          <li><b>見た目（矢印・線種・経路）</b>: 「🔗 コネクタ」ボタンをONにすると選択メニューがその場で開きます。「矢印」（なし／片側／両側）、「線種」（実線／破線、デフォルトは実線）、「経路」（直線／直角／曲線）をそれぞれ独立して選べます。直角・曲線を選ぶと、他のオブジェクトを避けるように自動で少し迂回します。選んだ内容はボタン横の記号（例：「→」＝片側矢印の実線）で確認できます。メニュー外をタップすると閉じます（作成後の変更はできません）。線の色は、その時点で「✏️ 色」に設定されている色が使われます。</li>
+          <li><b>関係ラベル</b>: 選択モード中に接続線をダブルタップすると、その線に関係性を示す文字ラベル（例：「所属」「依存」など）を付けられます。線を動かすとラベルも一緒に追従します。</li>
+          <li><b>注意点</b>: 手書きの線などナナメに傾いた図形の場合、接続点は図形を囲む長方形（バウンディングボックス）の縁を基準に計算されるため、見た目の輪郭と数ピクセルずれることがあります。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>🧩 図形・表の挿入</h4>
+        <ul>
+          <li><b>🔷 図形</b>: メニューの「🔷 図形」から、四角形・円/楕円・三角形・ひし形・矢印を選ぶと、その図形が画面中央に挿入されます。考えを整理する図（フローチャートなど）を作るときに、手書きよりきれいに素早く配置できます。</li>
+          <li><b>▦ 表（テーブル）</b>: メニューの「▦ 表」から行数・列数を指定して挿入します。各セルは文字を入力すると自動で折り返され（改行され）、文字が増えてセルの高さが足りなくなると、その行の高さが自動的に広がります。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>🎯 提示・暗記モード</h4>
+        <ul>
+          <li><b>🔴 一時描画ペン（レーザーポインター風）</b>: 「🔴 レーザー」を選んで描くと、赤い線でその場を指し示せます。描いた線は1〜2秒ほどでじわっと自動的に消え、履歴にも残りません。画面共有や対面での説明で、ノートを汚さず「ここ注目！」と示すのに便利です。</li>
+          <li><b>🟥 暗記マスク（赤シート風）</b>: 「🟥 マスク」をONにして、隠したい範囲をドラッグすると、その部分を覆う四角ができます。選択モードなどでマスクを直接タップすると、表示（覆う）⇔非表示（覆いを外す）が瞬時に切り替わります。資格試験の暗記シートや、授業・プレゼンでの穴埋めクイズ形式の進行に使えます。タップでの切り替えはその場限りの一時的な操作として扱われ、ページを離れて戻ると再び隠れた状態に戻ります。</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <h4>🧽 消しゴム</h4>
+        <ul>
+          <li><b>消し方の切り替え</b>: 「消しゴム」ボタンを<b>タップ</b>すると要素ごと消すモードのON/OFFが切り替わります。同じボタンを<b>長押し</b>すると「部分消し」モードに切り替わり、手書き線はなぞった部分だけが消えます（図形・文字・画像は引き続き要素ごとの削除のみです）。部分消しモード中はアイコンがオレンジ色に変わります。消しゴムの大きさはペンの「太さ」設定と連動します。</li>
+          <li><b>自動解除</b>: ペンボタンをタップしたり、キャンバスをダブルタップして文字入力に入ったりすると、消しゴムモードは自動的に解除されます。</li>
         </ul>
       </div>
 
@@ -812,30 +889,32 @@
           <li><b>スマホ・タブレット</b>: 2本指で画面をスワイプすると移動、つまむ（ピンチアウト/イン）と拡大・縮小ができます。手書き中に誤作動する場合は「✋ 移動固定」をONにしてください。</li>
           <li><b>パソコン</b>: マウスの「右ドラッグ」または「Shiftキーを押しながらドラッグ」で画面を移動できます。マウスホイールで拡大・縮小が可能です。</li>
           <li><b>位置のリセット</b>: 画面を見失った時は「🎯」で初期位置に、「🔍」で描いた全体が収まる位置に自動調整します。</li>
+          <li><b>右側メニューの折りたたみ</b>: 右端の「»」ボタンでメニュー全体をたたんで画面を広く使えます。たたんだ状態では「«」に変わり、押すと元に戻ります。選んだ状態は次回も記憶されます。</li>
         </ul>
       </div>
 
       <div class="modal-section">
-        <h4>🗒️ 背景の格子線と用紙サイズグリッド</h4>
+        <h4>🗒️ 背景の色・罫線・用紙サイズ</h4>
         <ul>
           <li><b>背景色</b>: 場面に応じて選べます。<b>白</b>＝画面を最大限明るくできるので屋外・直射日光下で見やすい／<b>セピア</b>＝暖色で目に優しく、室内での長時間の書き込みに／<b>黒板</b>＝教室の黒板をイメージした深緑色／<b>ディム</b>＝薄暗い部屋で、純黒ほど強いコントラストにしたくないときに／<b>ダーク</b>＝暗い部屋向けで、真っ黒より少し明るいグレーにすることで目の負担（強すぎるコントラストによる疲れ）を抑えています／<b>漆黒</b>＝有機EL(OLED)画面では黒い画素は発光しないため、真っ黒にするほど消費電力を抑えられます。バッテリー節約を最優先したい、完全に暗い場所での使用に向いています。</li>
-          <li><b>背景の格子線</b>: 方眼の1マスはおよそ1cm相当（フォントサイズと同じ基準＝96px=1インチで換算）です。破線で描かれているのは、下記の「用紙サイズグリッド」（実線）と見分けやすくするためです。</li>
-          <li><b>用紙サイズグリッド</b>: 「用紙」のメニューからB5／A4／B4／A3をそれぞれ縦・横で選ぶと、その用紙サイズちょうどの実線の区切りが画面全体に縦横どこまでも敷き詰められ、複数ページ分のレイアウトの目安になります（背景の格子より濃い実線です）。「なし」を選べば非表示に戻ります。このグリッドは画面上の目安であり、PNG/PDFへの書き出しには含まれません。</li>
+          <li><b>背景の罫線パターン</b>: 「罫線」のメニューから、方眼（デフォルト）・なし（無地）・横罫線・縦罫線・五線譜・英語4線（上から3本目＝ベースラインだけ太く強調）・キャビネット図用（三角格子）から選べます。選んだ罫線はPNG/PDFの書き出しや印刷にもそのまま残ります。「なし」を選べば、印刷時にも罫線が残らない無地の状態に戻せます。</li>
+          <li><b>用紙サイズグリッド</b>: 「用紙」のメニューからB5／A4／B4／A3をそれぞれ縦・横で選ぶと、その用紙サイズちょうどの実線の区切りが画面全体に縦横どこまでも敷き詰められ、複数ページ分のレイアウトの目安になります（背景の罫線より濃い実線です）。「なし」を選べば非表示に戻ります。</li>
         </ul>
       </div>
 
       <div class="modal-section">
         <h4>📁 ファイルの読み込みと出力保存</h4>
         <ul>
-          <li><b>読み込み（📁 ファイル）</b>: お手持ちの画像（PNG/JPEG）や<b>PDFファイル</b>を取り込んで、その上に手書きやメモを重ねることができます。複数ページのPDFにも対応しています。</li>
-          <li><b>書き出し（💾 PNG / 📄 PDF）</b>: キャンバスに書いたすべての内容（手書き・文字・画像）を網羅して、1枚の画像（PNG）またはPDFとして保存できます。「用紙」でB5／A4／B4／A3のいずれかを選んだ状態でPDF書き出しすると、「用紙サイズごとにページを分けるか」を確認するダイアログが出ます。分割を選ぶと、実際に描かれているマスだけが、それぞれ実寸サイズのPDFページとして書き出されます。PDFは印刷品質（300dpi相当）を保ちながらファイルサイズを抑えるため、ページ画像をJPEG圧縮しています（💾 PNGは劣化のない可逆圧縮のままです）。</li>
+          <li><b>読み込み（🖼️ 挿入）</b>: お手持ちの画像（PNG/JPEG）や<b>PDFファイル</b>を取り込んで、その上に手書きやメモを重ねることができます。複数ページのPDFにも対応しています。</li>
+          <li><b>書き出し（💾 PNG / 📄 PDF）</b>: キャンバスに書いたすべての内容（手書き・文字・画像・背景の罫線）を網羅して、1枚の画像（PNG）またはPDFとして保存できます。「用紙」でB5／A4／B4／A3のいずれかを選んだ状態でPDF書き出しすると、「用紙サイズごとにページを分けるか」を確認するダイアログが出ます。分割を選ぶと、実際に描かれているマスだけが、それぞれ実寸サイズのPDFページとして書き出されます。PDFは印刷品質（300dpi相当）を保ちながらファイルサイズを抑えるため、ページ画像をJPEG圧縮しています（💾 PNGは劣化のない可逆圧縮のままです）。</li>
+          <li><b>📤 データ書出 / 📥 データ読込</b>: 全ページの内容を1つのファイル(.json)にまとめて保存・復元できます。他の端末に移したり、バックアップとして保管したりするのに使えます（PNG/PDFと違い、あとで再編集できる形式です）。</li>
         </ul>
       </div>
 
       <div class="modal-section">
         <h4>📑 ページ管理 & 自動保存</h4>
         <ul>
-          <li><b>複数ページ</b>: 上部メニューの「＋」で新規ページを追加し、「◀」「▶」で自由に切り替えができます。</li>
+          <li><b>複数ページ</b>: 上部メニューの「＋」で新規ページを追加し、「⧉」で今のページをそのまま複製し、「◀」「▶」で自由に切り替えができます。</li>
           <li><b>安心の自動保存</b>: 書いた内容や作成したページはブラウザ内に自動的に保存されます。ページを閉じたり再読み込みしても続きから作業できます。</li>
         </ul>
       </div>
@@ -845,22 +924,8 @@
         <ul>
           <li><b>Ctrl + Z</b>: 1つ前の操作を取り消す（元に戻す）</li>
           <li><b>Ctrl + Y</b>: 取り消した操作をやり直す</li>
+          <li><b>Ctrl + D</b>: 選択中のオブジェクトを複製</li>
           <li><b>Delete / Backspace</b>: 選択中のオブジェクトを削除</li>
-        </ul>
-      </div>
-
-      <div class="modal-section">
-        <h4>🆕 追加機能</h4>
-        <ul>
-          <li><b>📋 複製</b>: オブジェクトを選択して右側の「📋」ボタン（またはCtrl+D）で、少しずらした位置にコピーを作れます。</li>
-          <li><b>🪢 なげなわ選択</b>: 「🪢 なげなわ」をONにして自由な形に囲むと、内側にある要素をまとめて選択できます（矩形ドラッグでの選択と併用できます）。</li>
-          <li><b>⬅️ 左揃え</b>: 複数のオブジェクトを選択すると、右側の「⬅️」ボタンで一番左にあるものに揃えて整列できます。</li>
-          <li><b>🔗 コネクタの経路と関係ラベル</b>: コネクタボタンのメニューで「経路」（直線／直角／曲線）を選べます。直角・曲線は、他のオブジェクトを避けるように自動で少し迂回します。また、選択モード中に接続線をダブルタップすると、関係性を示す文字ラベル（例：「所属」「依存」など）を付けられます。</li>
-          <li><b>🧲 スナップ吸着ガイド</b>: オブジェクトを移動すると、他のオブジェクトの端・中心や方眼の格子に近づいた時、ピンク色の補助線が表示されてピタッと揃います。</li>
-          <li><b>📤 データ書出 / 📥 データ読込</b>: 全ページの内容を1つのファイル(.json)にまとめて保存・復元できます。他の端末に移したり、バックアップとして保管したりするのに使えます（PNG/PDFと違い、あとで再編集できる形式です）。</li>
-          <li><b>💧 スポイト</b>: 「色」パレットの「💧 キャンバスから色を取得」を押した後、キャンバス上の画像・手書き線・背景など好きな場所をタップすると、その色をペン色/文字色として取得できます。</li>
-          <li><b>〰️ 部分消し</b>: 消しゴムモード中に「〰️部分」をONにすると、手書き線はなぞった部分だけが消えます（OFF＝従来通り要素ごと消去）。図形・文字・画像は引き続き要素ごとの削除のみです。</li>
-          <li><b>🔤 文字認識</b>: 手書き文字を選択して右側の「🔤」ボタンを押すと、無料のオンラインAPIを使って文字データ（テキスト）に変換し、隣に新しいテキストとして追加します。インターネット接続が必要で、無料APIのため混雑時は失敗することがあります（元の手書きはそのまま残ります）。</li>
         </ul>
       </div>
 
@@ -1039,7 +1104,7 @@
         isTwoFingerTouch = false;
         touchStartDist = 0;
         
-        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') {
+        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper' && currentDrawMode !== 'mask') {
           canvas.isDrawingMode = true;
         }
       }
@@ -1090,11 +1155,105 @@
     //   パターンとして敷き詰めることで、「細かい方眼」の上に「用紙サイズの
     //   区切り」が縦横に何枚も連続して並んだ状態を、1枚の背景パターンだけで
     //   実現している（用紙サイズ用に別オブジェクトは作らない）。
-    function generateGridPattern(bgColor, paperSizeKey) {
+    function drawDashedGridPattern(ctx, tileW, tileH, size, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      for (let gy = 0; gy < tileH; gy += size) {
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(tileW, gy); ctx.stroke();
+      }
+      for (let gx = 0; gx < tileW; gx += size) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, tileH); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+    function drawHorizontalRuledPattern(ctx, tileW, tileH, size, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      for (let gy = 0; gy < tileH; gy += size) {
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(tileW, gy); ctx.stroke();
+      }
+    }
+    function drawVerticalRuledPattern(ctx, tileW, tileH, size, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      for (let gx = 0; gx < tileW; gx += size) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, tileH); ctx.stroke();
+      }
+    }
+    function drawMusicStaffPattern(ctx, tileW, tileH, color) {
+      // 5本1組の五線譜を、一定の間隔を空けながら縦に並べる
+      const lineGap = Math.max(8, Math.round(GRID_SIZE / 5));
+      const groupGap = lineGap * 4;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      let y = lineGap;
+      while (y < tileH) {
+        for (let i = 0; i < 5; i++) {
+          const ly = y + i * lineGap;
+          if (ly > tileH) break;
+          ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(tileW, ly); ctx.stroke();
+        }
+        y += lineGap * 4 + groupGap;
+      }
+    }
+    function drawEnglish4LinePattern(ctx, tileW, tileH, color, accentColor) {
+      // 4本1組（上端線・中間線(破線)・ベースライン(強調)・下端線）を縦に繰り返す。
+      // 上から3本目＝ベースラインだけ太く・色を変えて強調する。
+      const lineGap = Math.max(12, Math.round(GRID_SIZE * 0.6));
+      const groupHeight = lineGap * 3;
+      const groupGapExtra = lineGap * 2.2;
+      let y = lineGap;
+      while (y < tileH) {
+        const ys = [y, y + lineGap, y + lineGap * 2, y + lineGap * 3];
+        ys.forEach((ly, i) => {
+          if (ly > tileH) return;
+          if (i === 2) {
+            ctx.strokeStyle = accentColor;
+            ctx.lineWidth = 1.8;
+            ctx.setLineDash([]);
+          } else if (i === 1) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+          } else {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([]);
+          }
+          ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(tileW, ly); ctx.stroke();
+        });
+        ctx.setLineDash([]);
+        y += groupHeight + groupGapExtra;
+      }
+    }
+    function drawCabinetGridPattern(ctx, tileW, tileH, size, color) {
+      // キャビネット図（斜投影図）用：縦横の格子に45度の斜線を重ね、三角格子にする
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      for (let gy = 0; gy < tileH; gy += size) {
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(tileW, gy); ctx.stroke();
+      }
+      for (let gx = 0; gx < tileW; gx += size) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, tileH); ctx.stroke();
+      }
+      const diag = Math.max(tileW, tileH) * 2;
+      for (let gx = -diag; gx < tileW + diag; gx += size) {
+        ctx.beginPath();
+        ctx.moveTo(gx, tileH);
+        ctx.lineTo(gx + tileH, 0);
+        ctx.stroke();
+      }
+    }
+
+    function generateGridPattern(bgColor, paperSizeKey, patternType) {
+      patternType = patternType || 'grid';
       const isDark = isDarkBackgroundColor(bgColor);
       const gridLineColor = isDark ? '#3d3d3d' : 'rgba(0, 0, 0, 0.13)';
       // 用紙サイズの区切りは、細かい方眼よりはっきり見えるよう意図的に濃くする
       const paperLineColor = isDark ? '#6b6b6b' : 'rgba(0, 0, 0, 0.32)';
+      const accentColor = isDark ? '#6ea8fe' : '#2f6fed';
 
       const paperPx = getPaperSizePx(paperSizeKey);
       const tileW = paperPx ? Math.round(paperPx.w) : GRID_SIZE;
@@ -1108,28 +1267,25 @@
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, tileW, tileH);
 
-      // --- 細かい方眼（破線）をタイル全体に敷き詰める ---
+      // --- 選択された罫線パターンを敷き詰める ---
       // ダッシュのパターン長(dash+gap)がGRID_SIZEを割り切れる値になるよう
       // 選んであり、マス目を繰り返し並べても継ぎ目でダッシュの位相がずれない。
-      // 各マスにつき上辺・左辺だけ描けば、隣接するマスの辺と合わさって
-      // 格子全体が漏れなく描かれる。
-      ctx.strokeStyle = gridLineColor;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]); // 4pxの実線 + 4pxの隙間（合計8px。GRID_SIZE=40を割り切れる）
-
-      for (let gy = 0; gy < tileH; gy += GRID_SIZE) {
-        ctx.beginPath();
-        ctx.moveTo(0, gy);
-        ctx.lineTo(tileW, gy);
-        ctx.stroke();
+      if (patternType === 'none') {
+        // 無地：罫線を描かない（印刷時に残らない、まっさらな状態）
+      } else if (patternType === 'lines-h') {
+        drawHorizontalRuledPattern(ctx, tileW, tileH, GRID_SIZE, gridLineColor);
+      } else if (patternType === 'lines-v') {
+        drawVerticalRuledPattern(ctx, tileW, tileH, GRID_SIZE, gridLineColor);
+      } else if (patternType === 'staff') {
+        drawMusicStaffPattern(ctx, tileW, tileH, gridLineColor);
+      } else if (patternType === 'english4') {
+        drawEnglish4LinePattern(ctx, tileW, tileH, gridLineColor, accentColor);
+      } else if (patternType === 'cabinet') {
+        drawCabinetGridPattern(ctx, tileW, tileH, GRID_SIZE, gridLineColor);
+      } else {
+        // 'grid'（デフォルト）
+        drawDashedGridPattern(ctx, tileW, tileH, GRID_SIZE, gridLineColor);
       }
-      for (let gx = 0; gx < tileW; gx += GRID_SIZE) {
-        ctx.beginPath();
-        ctx.moveTo(gx, 0);
-        ctx.lineTo(gx, tileH);
-        ctx.stroke();
-      }
-      ctx.setLineDash([]); // 以降の実線（用紙サイズの区切り）に影響しないようリセット
 
       // --- 用紙サイズの区切り線（実線） ---
       // タイルの外周がそのまま「用紙1枚分の境界」になる。パターンとして
@@ -1165,7 +1321,8 @@
 
     function updateCanvasBackground(bgColor) {
       const paperSizeKey = paperSizeSelect ? paperSizeSelect.value : '';
-      const { dataUrl, tileW, tileH } = generateGridPattern(bgColor, paperSizeKey);
+      const patternType = bgPatternSelect ? bgPatternSelect.value : 'grid';
+      const { dataUrl, tileW, tileH } = generateGridPattern(bgColor, paperSizeKey, patternType);
       fabric.Image.fromURL(dataUrl, (img) => {
         const pattern = new fabric.Pattern({ source: img.getElement(), repeat: 'repeat' });
         if (paperSizeKey) {
@@ -1188,7 +1345,7 @@
 
       // 消しゴムモード中は、なぞって連続的に消す操作を四角い範囲選択と
       // 誤認識させないよう、Fabric標準の範囲選択（マーキー選択）を無効化する。
-      canvas.selection = (currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper');
+      canvas.selection = (currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper' && currentDrawMode !== 'mask');
 
       if (currentDrawMode === 'pen') {
         canvas.isDrawingMode = !isPanLockMode && !isSelectMode;
@@ -1205,6 +1362,13 @@
         const b = parseInt(hex.substr(4, 2), 16) || 0;
         canvas.freeDrawingBrush.color = `rgba(${r}, ${g}, ${b}, 0.35)`;
         canvas.freeDrawingBrush.width = Math.max(12, width * 3);
+      } else if (currentDrawMode === 'laser') {
+        // 一時描画ペン（レーザーポインター風）：色は常に赤で固定し、
+        // 描いた線は少し経つと自動的にフェードアウトして消える。
+        canvas.isDrawingMode = !isPanLockMode && !isSelectMode;
+        canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+        canvas.freeDrawingBrush.color = '#ff3b30';
+        canvas.freeDrawingBrush.width = Math.max(4, width);
       } else {
         // eraser / connector など、フリードローを行わないモードは
         // 明示的に isDrawingMode を false にする。
@@ -1255,7 +1419,7 @@
     // ここでは実際にFabricへイベントが渡る前に isDrawingMode を確定させることで、
     // その競合を根本的に解消する。
     function precomputeInteractionMode(e) {
-      if (currentDrawMode === 'eraser' || currentDrawMode === 'lasso' || currentDrawMode === 'eyedropper') { canvas.isDrawingMode = false; return; }
+      if (currentDrawMode === 'eraser' || currentDrawMode === 'lasso' || currentDrawMode === 'eyedropper' || currentDrawMode === 'mask') { canvas.isDrawingMode = false; return; }
 
       const isCtrl = e.ctrlKey || e.metaKey || isCtrlKeyPhysicallyHeld;
       const isShift = e.shiftKey;
@@ -2553,14 +2717,14 @@
       if (isPanDragging) {
         canvas.setViewportTransform(canvas.viewportTransform);
         isPanDragging = false;
-        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') {
+        if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper' && currentDrawMode !== 'mask') {
           canvas.isDrawingMode = true;
         }
         canvas.defaultCursor = 'default';
         return;
       }
 
-      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') {
+      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper' && currentDrawMode !== 'mask') {
         canvas.isDrawingMode = true;
       }
     });
@@ -2580,7 +2744,7 @@
       if (!isPanDragging) return;
       isPanDragging = false;
       canvas.defaultCursor = 'default';
-      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') {
+      if (!canvas.getActiveObject() && !isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper' && currentDrawMode !== 'mask') {
         canvas.isDrawingMode = true;
       }
     }
@@ -2595,7 +2759,7 @@
     canvas.on('selection:created', onSelection);
     canvas.on('selection:updated', onSelection);
     canvas.on('selection:cleared', function() {
-      if (!isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper') canvas.isDrawingMode = true;
+      if (!isPanLockMode && !isSelectMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper' && currentDrawMode !== 'mask') canvas.isDrawingMode = true;
       // 注意: ここで removeLockIcon() は呼ばない。
       // ロックアイコン（選択不可のオブジェクト）をタップすると、Fabricは内部処理として
       // 先に「直前の選択」を解除するため、この selection:cleared がアイコンのタップより
@@ -2638,6 +2802,8 @@
 
     const penModeBtn = document.getElementById('pen-mode-btn');
     const highlighterModeBtn = document.getElementById('highlighter-mode-btn');
+    const laserModeBtn = document.getElementById('laser-mode-btn');
+    const maskModeBtn = document.getElementById('mask-mode-btn');
     const eraserModeBtn = document.getElementById('eraser-mode-btn');
     const selectModeBtn = document.getElementById('select-mode-btn');
     // （なげなわ選択は「選択」ボタンの長押しに統合したため、専用ボタンは廃止）
@@ -2706,6 +2872,7 @@
       const suppressed = isSelectMode || isPanLockMode;
       penModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'pen');
       highlighterModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'highlighter');
+      laserModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'laser');
       eraserModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'eraser');
       connectorBtn.classList.toggle('active', !suppressed && currentDrawMode === 'connector');
     }
@@ -2713,6 +2880,7 @@
     function setDrawMode(mode) {
       currentDrawMode = mode;
       refreshToolButtonHighlights();
+      maskModeBtn.classList.toggle('active', mode === 'mask');
       // なげなわ選択は専用ボタンを持たず「選択」ボタンに統合しているため、
       // 見た目もselectModeBtn側で表現する（ラベル文字とactive状態の両方）。
       selectModeBtn.classList.toggle('active', mode === 'lasso');
@@ -2735,6 +2903,14 @@
 
     penModeBtn.addEventListener('click', () => setDrawMode('pen'));
     highlighterModeBtn.addEventListener('click', () => setDrawMode('highlighter'));
+    laserModeBtn.addEventListener('click', () => setDrawMode('laser'));
+    maskModeBtn.addEventListener('click', () => {
+      if (currentDrawMode === 'mask') {
+        setDrawMode('pen');
+      } else {
+        setDrawMode('mask');
+      }
+    });
     connectorBtn.addEventListener('click', () => {
       // コネクタモード中にもう一度押した場合は解除（ペンモードへ戻す）。
       // 以前は常に setDrawMode('connector') を呼ぶだけだったため、
@@ -2817,7 +2993,7 @@
       const isActivelySelecting = isSelectMode ||
         currentDrawMode === 'lasso' ||
         isCtrlKeyPhysicallyHeld ||
-        (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper');
+        (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper' && currentDrawMode !== 'mask');
       selectModeBtn.classList.toggle('active', isActivelySelecting);
     }
 
@@ -2847,7 +3023,8 @@
       'isOriginMark', 'isLocked', 'selectable',
       'connId', 'isConnectorLine', 'connFromId', 'connToId', 'arrowType',
       'connRouteType', '_lineId', 'labelForLineId', 'connSeq',
-      'groupId'
+      'groupId',
+      'tableId', 'isTableGrid', '_tableOriginLeft', '_tableOriginTop', 'tableRow', 'tableCol'
     ];
 
     function saveState() {
@@ -2958,6 +3135,15 @@
       switchPage(pagesData.length - 1);
     });
 
+    document.getElementById('duplicate-page-btn').addEventListener('click', () => {
+      // 今編集中の内容を確実にpagesDataへ反映してから複製する
+      flushCurrentPageToPagesData();
+      const copy = pagesData[currentPageIndex];
+      pagesData.splice(currentPageIndex + 1, 0, copy);
+      switchPage(currentPageIndex + 1);
+      autoSaveLocal();
+    });
+
     document.getElementById('delete-page-btn').addEventListener('click', () => {
       if (pagesData.length <= 1) {
         alert('これ以上ページを減らせません。');
@@ -2981,6 +3167,7 @@
     const fontSizeInput = document.getElementById('font-size-input');
     const textColorInput = document.getElementById('text-color');
     const bgStyleSelect = document.getElementById('bg-style');
+    const bgPatternSelect = document.getElementById('bg-pattern-select');
     const paperSizeSelect = document.getElementById('paper-size-select');
     const deleteSelectedBtn = document.getElementById('delete-selected-btn');
     const duplicateSelectedBtn = document.getElementById('duplicate-selected-btn');
@@ -3207,6 +3394,14 @@
       updateCanvasBackground(bgStyleSelect.value);
     });
 
+    // 背景の罫線パターン（方眼/横罫線/五線譜/英語4線/キャビネット図用など）の
+    // 切り替えも、背景色・用紙サイズと同様に画面全体の表示設定として扱う。
+    // 印刷/PDF/PNG出力はこのキャンバス背景をそのまま書き出すため、
+    // 選んだ罫線はそのまま印刷にも残る。「なし」を選べば無地に戻せる。
+    bgPatternSelect.addEventListener('change', () => {
+      updateCanvasBackground(bgStyleSelect.value);
+    });
+
     function getCenterPosition() {
       const vpt = canvas.viewportTransform;
       const zoom = canvas.getZoom();
@@ -3313,12 +3508,23 @@
       const activeObjects = canvas.getActiveObjects();
       if (activeObjects && activeObjects.length > 0) {
         const affectedGids = new Set();
+        const affectedTableIds = new Set();
         activeObjects.forEach(obj => {
           if (isGuideObject(obj)) return;
           if (obj.groupId) affectedGids.add(obj.groupId);
+          if (obj.tableId) affectedTableIds.add(obj.tableId);
           canvas.remove(obj);
         });
         cleanupOrphanedGroupIds(affectedGids);
+        affectedTableIds.forEach(tid => {
+          const remainingCells = canvas.getObjects().filter(o => o.tableId === tid && o.type === 'textbox');
+          if (remainingCells.length === 0) {
+            // 表の全セルが消えた場合は、罫線だけが残ってしまわないよう一緒に消す
+            canvas.getObjects().slice().forEach(o => { if (o.tableId === tid) canvas.remove(o); });
+          } else {
+            reflowTable(tid);
+          }
+        });
         canvas.discardActiveObject();
         canvas.renderAll();
         updateDeleteButtonState();
@@ -3650,6 +3856,26 @@
     // timingVertices: 描画中に「約0.2秒その場で止まった」場所として検出した
     // 頂点候補（キャンバス座標）。指定があれば、幾何学的な単純化より優先して
     // 頂点として使う（ユーザーが意図的に角を作ろうとした証拠のため）。
+    // start→end を軸として、指定した振幅・山の数できれいな波線のパス文字列を作る。
+    function buildCleanWavePathString(start, end, amplitude, humps) {
+      const dx = end.x - start.x, dy = end.y - start.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const nx = -uy, ny = ux;
+      const steps = Math.max(24, humps * 14);
+      let d = `M ${start.x} ${start.y}`;
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const alongX = start.x + ux * len * t;
+        const alongY = start.y + uy * len * t;
+        const wave = Math.sin(2 * Math.PI * humps * t) * amplitude;
+        const px = alongX + nx * wave;
+        const py = alongY + ny * wave;
+        d += ` L ${px} ${py}`;
+      }
+      return d;
+    }
+
     function recognizeShapeFromPath(fabricPath, timingVertices) {
       const rawPts = extractPathPoints(fabricPath);
       if (rawPts.length < 3) return null;
@@ -3698,7 +3924,30 @@
         if (simplified.length <= 3) {
           return { type: 'line', points: [start, end], bbox };
         }
-        return null; // 未閉曲線かつ単純な直線でもない場合は対象外（曖昧な形は変換しない）
+
+        // --- 波線判定 ---
+        // 始点→終点を結ぶ軸を基準に、その軸を何度もまたいでジグザグ/波打って
+        // いる場合は「波線」として扱う（下線の代わりの装飾や、注目させたい
+        // 箇所に引く波線などに使えるようにする）。
+        const axisDx = end.x - start.x, axisDy = end.y - start.y;
+        const axisLen = Math.hypot(axisDx, axisDy) || 1;
+        const ux = axisDx / axisLen, uy = axisDy / axisLen;
+        const nx = -uy, ny = ux; // 軸に垂直な単位ベクトル
+        const perp = dedupedPts.map(p => {
+          const vx = p.x - start.x, vy = p.y - start.y;
+          return vx * nx + vy * ny;
+        });
+        let crossings = 0;
+        for (let i = 1; i < perp.length; i++) {
+          if ((perp[i] >= 0) !== (perp[i - 1] >= 0)) crossings++;
+        }
+        const maxPerp = Math.max.apply(null, perp), minPerp = Math.min.apply(null, perp);
+        const amplitude = (maxPerp - minPerp) / 2;
+        if (crossings >= 2 && amplitude > 4 && amplitude < axisLen * 0.5) {
+          const humps = Math.max(1, Math.round(crossings / 2));
+          return { type: 'wave', start, end, amplitude, humps, bbox };
+        }
+        return null; // 未閉曲線かつ単純な直線・波線でもない場合は対象外（曖昧な形は変換しない）
       }
 
       // --- 頂点候補の決定（頂点タイミングがない場合は、円判定より先に計算しておく） ---
@@ -3798,6 +4047,11 @@
         // 絶対座標の点をそのまま渡し、left/topはFabricに自動計算させる
         const pts = recog.points.map(p => ({ x: offsetX + p.x, y: offsetY + p.y }));
         shapeObj = new fabric.Polygon(pts, commonProps);
+      } else if (recog.type === 'wave') {
+        const p1 = { x: offsetX + recog.start.x, y: offsetY + recog.start.y };
+        const p2 = { x: offsetX + recog.end.x, y: offsetY + recog.end.y };
+        const d = buildCleanWavePathString(p1, p2, recog.amplitude, recog.humps);
+        shapeObj = new fabric.Path(d, commonProps);
       }
 
       if (!shapeObj) return false;
@@ -3905,6 +4159,12 @@
     const SHAPE_CONFIRM_HOLD_MS = 550; // 図形化の確定とみなす保持時間（約0.55秒。1秒は長すぎるとの声を受けて短縮）
 
     canvas.on('path:created', (e) => {
+      // 一時描画ペン（レーザーポインター風）は、描いた線を履歴に残さず・図形化も
+      // 試みず、少し経ったら自動的にフェードアウトして消えるだけの特殊モード。
+      if (currentDrawMode === 'laser') {
+        scheduleLaserFade(e.path);
+        return;
+      }
       // 長押し（画像・図形を固定/固定解除するための選択）が成立していた場合、
       // Fabricは指を置いた場所からその一瞬のブレの分だけ、意図しない
       // 微小なストロークを自動的に描いてしまう。以前は「幅・高さが2px以下」
@@ -4816,11 +5076,17 @@
           return;
         }
 
+        // 元の手書きとほぼ同じ場所・同じくらいの大きさにテキストを配置し、
+        // 手書き線そのものは消すことで「手書きがテキストに変わった」ように見せる。
+        const lineCount = Math.max(1, text.split('\n').length);
+        const estFontSize = Math.max(10, Math.round((maxY - minY) / lineCount));
+        const strokeColor = (paths[0] && paths[0].stroke) || textColorInput.value;
         const textObj = new fabric.IText(text, {
-          left: maxX + 20, top: minY,
-          fontSize: parseInt(fontSizeInput.value, 10) || 22,
-          fill: textColorInput.value, fontFamily: fontSelect.value
+          left: minX, top: minY,
+          fontSize: estFontSize,
+          fill: strokeColor, fontFamily: fontSelect.value
         });
+        paths.forEach(p => canvas.remove(p));
         canvas.add(textObj);
         canvas.setActiveObject(textObj);
         canvas.renderAll();
@@ -5117,6 +5383,330 @@
       try { localStorage.setItem(PANEL_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) { /* 無視 */ }
     });
 
+    // ============================================================
+    // 🔷 図形の直接挿入（考えを整理するための簡易図形）
+    // ============================================================
+    const insertShapeBtn = document.getElementById('insert-shape-btn');
+    const insertShapePopup = document.getElementById('insert-shape-popup');
+    insertShapeBtn.addEventListener('click', () => {
+      openFloatingPopup(insertShapePopup, insertShapeBtn);
+    });
+    insertShapePopup.querySelectorAll('.shape-insert-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        insertShapeAt(btn.dataset.shape);
+        closeFloatingPopup(insertShapePopup);
+      });
+    });
+
+    function insertShapeAt(shapeType) {
+      const center = getCenterPosition();
+      const w = 120, h = 80;
+      const commonProps = {
+        left: center.x, top: center.y, originX: 'center', originY: 'center',
+        stroke: penColorInput.value, strokeWidth: 2, fill: 'transparent'
+      };
+      let obj = null;
+      if (shapeType === 'rect') {
+        obj = new fabric.Rect(Object.assign({}, commonProps, { width: w, height: h }));
+      } else if (shapeType === 'ellipse') {
+        obj = new fabric.Ellipse(Object.assign({}, commonProps, { rx: w / 2, ry: h / 2 }));
+      } else if (shapeType === 'triangle') {
+        obj = new fabric.Triangle(Object.assign({}, commonProps, { width: w, height: h }));
+      } else if (shapeType === 'diamond') {
+        const pts = [{ x: 0, y: -h / 2 }, { x: w / 2, y: 0 }, { x: 0, y: h / 2 }, { x: -w / 2, y: 0 }];
+        obj = new fabric.Polygon(pts, Object.assign({}, commonProps, { left: center.x, top: center.y }));
+      } else if (shapeType === 'arrow') {
+        // 矢印：横向きの軸線＋先端の三角形をグループ化した図形
+        const shaft = new fabric.Line([-w / 2, 0, w / 2 - 14, 0], { stroke: penColorInput.value, strokeWidth: 3 });
+        const head = new fabric.Triangle({
+          left: w / 2, top: 0, originX: 'center', originY: 'center',
+          width: 22, height: 22, angle: 90, fill: penColorInput.value
+        });
+        obj = new fabric.Group([shaft, head], { left: center.x, top: center.y });
+      }
+      if (!obj) return;
+      canvas.add(obj);
+      canvas.setActiveObject(obj);
+      canvas.requestRenderAll();
+      saveState();
+    }
+
+    // ============================================================
+    // ▦ 表（テーブル）の挿入
+    // 各セルは fabric.Textbox（幅固定で自動的に文字を折り返せる）で作り、
+    // セル内の文字が増えて折り返された分だけ、その行の高さを自動的に広げる。
+    // ============================================================
+    let tableIdSeq = 0;
+    function generateTableId() {
+      tableIdSeq++;
+      return 'tbl_' + Date.now().toString(36) + '_' + tableIdSeq;
+    }
+
+    function buildTableGridPathString(originLeft, originTop, colWidths, rowHeights) {
+      const totalW = colWidths.reduce((a, b) => a + b, 0);
+      const totalH = rowHeights.reduce((a, b) => a + b, 0);
+      let d = `M ${originLeft} ${originTop} L ${originLeft + totalW} ${originTop} L ${originLeft + totalW} ${originTop + totalH} L ${originLeft} ${originTop + totalH} Z `;
+      let y = originTop;
+      for (let r = 0; r < rowHeights.length - 1; r++) {
+        y += rowHeights[r];
+        d += `M ${originLeft} ${y} L ${originLeft + totalW} ${y} `;
+      }
+      let x = originLeft;
+      for (let c = 0; c < colWidths.length - 1; c++) {
+        x += colWidths[c];
+        d += `M ${x} ${originTop} L ${x} ${originTop + totalH} `;
+      }
+      return d.trim();
+    }
+
+    function buildTableGridObject(tableId, originLeft, originTop, colWidths, rowHeights) {
+      const d = buildTableGridPathString(originLeft, originTop, colWidths, rowHeights);
+      const grid = new fabric.Path(d, {
+        stroke: '#888888', strokeWidth: 1, fill: '',
+        selectable: false, evented: false,
+        isTableGrid: true, tableId,
+        objectCaching: false
+      });
+      grid._tableOriginLeft = originLeft;
+      grid._tableOriginTop = originTop;
+      return grid;
+    }
+
+    function insertTableAt(rows, cols) {
+      rows = Math.max(1, Math.min(20, rows || 3));
+      cols = Math.max(1, Math.min(10, cols || 3));
+      const center = getCenterPosition();
+      const defaultColWidth = 100;
+      const defaultRowHeight = 34;
+      const totalW = defaultColWidth * cols;
+      const totalH = defaultRowHeight * rows;
+      const originLeft = center.x - totalW / 2;
+      const originTop = center.y - totalH / 2;
+      const cellPad = 6;
+
+      const tableId = generateTableId();
+      const colWidths = new Array(cols).fill(defaultColWidth);
+      const rowHeights = new Array(rows).fill(defaultRowHeight);
+
+      let y = originTop;
+      for (let r = 0; r < rows; r++) {
+        let x = originLeft;
+        for (let c = 0; c < cols; c++) {
+          const tb = new fabric.Textbox('', {
+            left: x + cellPad, top: y + cellPad,
+            width: colWidths[c] - cellPad * 2,
+            fontSize: 14, fill: textColorInput.value, fontFamily: fontSelect.value,
+            splitByGrapheme: true, // 日本語など単語区切りの無い文でも折り返せるように
+            tableId, tableRow: r, tableCol: c
+          });
+          canvas.add(tb);
+          x += colWidths[c];
+        }
+        y += rowHeights[r];
+      }
+
+      const gridObj = buildTableGridObject(tableId, originLeft, originTop, colWidths, rowHeights);
+      canvas.add(gridObj);
+      const originMark = canvas.getObjects().find(o => o.isOriginMark);
+      if (originMark) canvas.moveTo(gridObj, canvas.getObjects().indexOf(originMark) + 1);
+      else canvas.sendToBack(gridObj);
+
+      canvas.requestRenderAll();
+      saveState();
+    }
+
+    let tableReflowTimers = {};
+    function scheduleTableReflow(tableId) {
+      if (tableReflowTimers[tableId]) clearTimeout(tableReflowTimers[tableId]);
+      tableReflowTimers[tableId] = setTimeout(() => reflowTable(tableId), 400);
+    }
+
+    function reflowTable(tableId) {
+      const cells = canvas.getObjects().filter(o => o.tableId === tableId && o.type === 'textbox');
+      const gridObj = canvas.getObjects().find(o => o.tableId === tableId && o.isTableGrid);
+      if (cells.length === 0 || !gridObj) return;
+      const originLeft = gridObj._tableOriginLeft, originTop = gridObj._tableOriginTop;
+      if (originLeft === undefined || originTop === undefined) return;
+
+      const rows = Math.max.apply(null, cells.map(c => c.tableRow)) + 1;
+      const cols = Math.max.apply(null, cells.map(c => c.tableCol)) + 1;
+      const cellPad = 6;
+
+      const colWidths = new Array(cols).fill(100);
+      cells.forEach(c => { colWidths[c.tableCol] = Math.max(colWidths[c.tableCol], c.width + cellPad * 2); });
+      const rowHeights = new Array(rows).fill(34);
+      cells.forEach(c => {
+        const needed = c.height + cellPad * 2;
+        if (needed > rowHeights[c.tableRow]) rowHeights[c.tableRow] = needed;
+      });
+
+      let y = originTop;
+      for (let r = 0; r < rows; r++) {
+        let x = originLeft;
+        for (let c = 0; c < cols; c++) {
+          const cell = cells.find(o => o.tableRow === r && o.tableCol === c);
+          if (cell) {
+            cell.set({ left: x + cellPad, top: y + cellPad });
+            cell.setCoords();
+          }
+          x += colWidths[c];
+        }
+        y += rowHeights[r];
+      }
+
+      canvas.remove(gridObj);
+      const newGrid = buildTableGridObject(tableId, originLeft, originTop, colWidths, rowHeights);
+      canvas.add(newGrid);
+      const originMark = canvas.getObjects().find(o => o.isOriginMark);
+      if (originMark) canvas.moveTo(newGrid, canvas.getObjects().indexOf(originMark) + 1);
+      else canvas.sendToBack(newGrid);
+
+      canvas.requestRenderAll();
+      saveState();
+    }
+
+    // Textboxの内容が変わるたび（文字入力の途中）は少し待ってからまとめて
+    // 反映し、編集を終えた瞬間（editing:exited）には即座に反映する。
+    canvas.on('text:changed', (opt) => {
+      const t = opt.target;
+      if (t && t.tableId) scheduleTableReflow(t.tableId);
+    });
+    canvas.on('text:editing:exited', (opt) => {
+      const t = opt.target;
+      if (t && t.tableId) {
+        if (tableReflowTimers[t.tableId]) { clearTimeout(tableReflowTimers[t.tableId]); delete tableReflowTimers[t.tableId]; }
+        reflowTable(t.tableId);
+      }
+    });
+
+    const insertTableBtn = document.getElementById('insert-table-btn');
+    const insertTablePopup = document.getElementById('insert-table-popup');
+    insertTableBtn.addEventListener('click', () => {
+      openFloatingPopup(insertTablePopup, insertTableBtn);
+    });
+    document.getElementById('table-insert-confirm-btn').addEventListener('click', () => {
+      const rows = parseInt(document.getElementById('table-rows-input').value, 10) || 3;
+      const cols = parseInt(document.getElementById('table-cols-input').value, 10) || 3;
+      insertTableAt(rows, cols);
+      closeFloatingPopup(insertTablePopup);
+    });
+
+    // ============================================================
+    // 🔴 一時描画ペン（レーザーポインター風）：描いた線を少し経ったら自動的に消す
+    // ============================================================
+    function scheduleLaserFade(path) {
+      path.selectable = false;
+      path.evented = false;
+      path.excludeFromExport = true; // 万一消える前に保存/書き出しされても含めない
+      const holdMs = 900;  // くっきり見えている時間
+      const fadeMs = 700;  // じわっと消えるまでの時間
+      setTimeout(() => {
+        const startTime = Date.now();
+        const startOpacity = path.opacity != null ? path.opacity : 1;
+        function step() {
+          if (!canvas.getObjects().includes(path)) return; // 既に消えていたら何もしない
+          const elapsed = Date.now() - startTime;
+          const t = Math.min(1, elapsed / fadeMs);
+          path.opacity = startOpacity * (1 - t);
+          canvas.requestRenderAll();
+          if (t < 1) {
+            requestAnimationFrame(step);
+          } else {
+            canvas.remove(path);
+            canvas.requestRenderAll();
+          }
+        }
+        requestAnimationFrame(step);
+      }, holdMs);
+    }
+
+    // ============================================================
+    // 🟥 暗記マスク（赤シート風）
+    // ドラッグした範囲を覆う四角を作り、選択モードなどでタップすると
+    // 表示/非表示（覆う/覆わない）が切り替わる。タップでの切替は
+    // その場で確認するための一時的な操作として扱い、履歴（元に戻す）には
+    // 残さない（ページを離れて戻ると、また隠れた状態から復習できる）。
+    // ============================================================
+    let maskDraftRect = null;
+    let maskDraftStart = null;
+
+    function handleMaskMouseDown(opt) {
+      if (opt.target && opt.target.isMemoryMask) return; // 既存マスクの上なら新規作成しない（タップ切替に任せる）
+      const p = canvas.getPointer(opt.e);
+      maskDraftStart = { x: p.x, y: p.y };
+      maskDraftRect = new fabric.Rect({
+        left: p.x, top: p.y, width: 1, height: 1,
+        fill: penColorInput.value, opacity: 0.5,
+        selectable: false, evented: false, excludeFromExport: true
+      });
+      canvas.add(maskDraftRect);
+    }
+    function handleMaskMouseMove(opt) {
+      if (!maskDraftRect || !maskDraftStart) return;
+      const p = canvas.getPointer(opt.e);
+      maskDraftRect.set({
+        left: Math.min(p.x, maskDraftStart.x),
+        top: Math.min(p.y, maskDraftStart.y),
+        width: Math.abs(p.x - maskDraftStart.x),
+        height: Math.abs(p.y - maskDraftStart.y)
+      });
+      maskDraftRect.setCoords();
+      canvas.requestRenderAll();
+    }
+    function handleMaskMouseUp() {
+      if (!maskDraftRect) return;
+      const left = maskDraftRect.left, top = maskDraftRect.top;
+      const width = maskDraftRect.width, height = maskDraftRect.height;
+      canvas.remove(maskDraftRect);
+      maskDraftRect = null;
+      maskDraftStart = null;
+      if (width < 10 || height < 10) { canvas.requestRenderAll(); return; }
+
+      const mask = new fabric.Rect({
+        left, top, width, height,
+        fill: penColorInput.value,
+        opacity: 0.93,
+        isMemoryMask: true,
+        isMaskRevealed: false,
+        maskFullOpacity: 0.93,
+        selectable: true, evented: true,
+        hoverCursor: 'pointer'
+      });
+      canvas.add(mask);
+      canvas.requestRenderAll();
+      saveState();
+    }
+
+    canvas.on('mouse:down', function(opt) {
+      if (currentDrawMode === 'mask') handleMaskMouseDown(opt);
+    });
+    canvas.on('mouse:move', function(opt) {
+      if (currentDrawMode === 'mask' && maskDraftRect) handleMaskMouseMove(opt);
+    });
+    canvas.on('mouse:up', function() {
+      if (currentDrawMode === 'mask') handleMaskMouseUp();
+    });
+
+    function toggleMemoryMask(mask) {
+      mask.isMaskRevealed = !mask.isMaskRevealed;
+      mask.set({ opacity: mask.isMaskRevealed ? 0.1 : (mask.maskFullOpacity || 0.93) });
+      canvas.requestRenderAll();
+    }
+    canvas.on('mouse:down', function(opt) {
+      if (opt.target && opt.target.isMemoryMask) opt.target._maskDragged = false;
+    });
+    canvas.on('object:moving', function(opt) {
+      if (opt.target && opt.target.isMemoryMask) opt.target._maskDragged = true;
+    });
+    canvas.on('object:scaling', function(opt) {
+      if (opt.target && opt.target.isMemoryMask) opt.target._maskDragged = true;
+    });
+    canvas.on('mouse:up', function(opt) {
+      if (opt.target && opt.target.isMemoryMask && !opt.target._maskDragged) {
+        toggleMemoryMask(opt.target);
+      }
+    });
+
     window.addEventListener('resize', () => {
       canvas.setWidth(window.innerWidth);
       canvas.setHeight(window.innerHeight);
@@ -5128,7 +5718,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.166     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.170     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
