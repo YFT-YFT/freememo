@@ -353,6 +353,24 @@
     }
     .color-more-btn:active { background: #eceff2; }
 
+    .thinking-tool-option {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      box-sizing: border-box;
+      width: 100%;
+      font-size: 12px;
+      padding: 7px 8px;
+      border-radius: 6px;
+      border: 1px solid #dee2e6;
+      background: #f8f9fa;
+      cursor: pointer;
+      color: #333;
+      user-select: none;
+      text-align: left;
+    }
+    .thinking-tool-option:active { background: #eceff2; }
+
     /* --- コネクタの線種選択ポップアップ --- */
     .connector-type-popup { width: 172px; }
     .connector-type-options {
@@ -478,6 +496,9 @@
        独自の紫系の色にする。 */
     button.group-btn { background: #6f42c1; }
     button.group-btn:disabled { background: #ced4da; cursor: not-allowed; opacity: 0.6; }
+    /* OCRボタンの「自動OCRモード」ON時の見た目（他のトグルボタンのactive状態と区別しやすいよう、
+       意味的に近い赤系＝「録っています」感のある色にする） */
+    #ocr-btn.active { background: #ff3b30; color: #fff; }
 
     button.clear-btn { background: #dc3545; }
 
@@ -658,6 +679,17 @@
           </div>
         </div>
         <div class="tool-item" style="position:relative;">
+          <button id="insert-thinking-tool-btn" title="思考ツールを挿入（クラゲチャート・Yチャート・フィッシュボーン図・ベン図など、考えを整理するテンプレート図）">🧠 思考ツール</button>
+          <div class="color-popup" id="insert-thinking-tool-popup">
+            <div style="display:flex; flex-direction:column; gap:2px; padding:2px; min-width:160px;">
+              <button type="button" class="thinking-tool-option" data-tool="jellyfish">🪼 クラゲチャート（理由づけ）</button>
+              <button type="button" class="thinking-tool-option" data-tool="ychart">🔺 Yチャート（多面的に見る）</button>
+              <button type="button" class="thinking-tool-option" data-tool="fishbone">🐟 フィッシュボーン図（原因分析）</button>
+              <button type="button" class="thinking-tool-option" data-tool="venn">⭕ ベン図（比較・共通点）</button>
+            </div>
+          </div>
+        </div>
+        <div class="tool-item" style="position:relative;">
           <button id="insert-table-btn" title="表（テーブル）を挿入">▦ 表</button>
           <div class="color-popup" id="insert-table-popup">
             <div style="display:flex; flex-direction:column; gap:8px; padding:6px; min-width:140px;">
@@ -705,7 +737,8 @@
         <div class="tool-item" title="背景パターン（印刷・PDF/PNG出力にもそのまま残ります）">
           <span>罫線:</span>
           <select id="bg-pattern-select">
-            <option value="grid">方眼（デフォルト）</option>
+            <option value="grid">方眼（出力なし・デフォルト）</option>
+            <option value="grid-export">方眼（出力あり）</option>
             <option value="none">なし（無地）</option>
             <option value="lines-h">横罫線</option>
             <option value="lines-v">縦罫線</option>
@@ -729,6 +762,12 @@
           <span>用紙:</span>
           <select id="paper-size-select">
             <option value="">なし</option>
+            <option value="a6-portrait">A6 縦</option>
+            <option value="a6-landscape">A6 横</option>
+            <option value="b6-portrait">B6 縦</option>
+            <option value="b6-landscape">B6 横</option>
+            <option value="a5-portrait">A5 縦</option>
+            <option value="a5-landscape">A5 横</option>
             <option value="b5-portrait">B5 縦</option>
             <option value="b5-landscape">B5 横</option>
             <option value="a4-portrait" selected>A4 縦</option>
@@ -737,6 +776,8 @@
             <option value="b4-landscape">B4 横</option>
             <option value="a3-portrait">A3 縦</option>
             <option value="a3-landscape">A3 横</option>
+            <option value="letter-portrait">レター 縦</option>
+            <option value="letter-landscape">レター 横</option>
           </select>
         </div>
         <button id="touch-pan-lock-btn" class="toggle-btn" title="画面スクロール固定">✋ 移動固定</button>
@@ -802,7 +843,7 @@
       </svg>
     </button>
     <button id="align-left-btn" class="group-btn" disabled title="左揃え（タップ）／縦に詰めて整列（長押し・一番上を基準に隙間なく並べます）">⬅️</button>
-    <button id="ocr-btn" class="group-btn" disabled title="選択した手書き文字をテキストデータに変換します（インターネット接続が必要です）">🔤</button>
+    <button id="ocr-btn" class="group-btn" title="選択した手書き文字をテキストデータに変換します（インターネット接続が必要です）。選択せずに押すと、描くたびに自動でOCRするモードのON/OFFを切り替えます">🔤</button>
     <button id="reset-view-btn" class="center-btn" title="初期位置（中央）へ戻す">🎯</button>
     <button id="fit-content-btn" class="fit-btn" title="全描画を画面に収める">🔍</button>
     <button id="undo-btn" class="history-btn" disabled title="元に戻す (Ctrl+Z)">↩️</button>
@@ -863,6 +904,7 @@
         <h4>🧩 図形・表の挿入</h4>
         <ul>
           <li><b>🔷 図形</b>: メニューの「🔷 図形」から、四角形・円/楕円・三角形・ひし形・矢印を選ぶと、その図形が画面中央に挿入されます。考えを整理する図（フローチャートなど）を作るときに、手書きよりきれいに素早く配置できます。</li>
+          <li><b>🧠 思考ツール</b>: メニューの「🧠 思考ツール」から、クラゲチャート（理由づけ）・Yチャート（多面的に見る）・フィッシュボーン図（原因分析）・ベン図（比較・共通点）といった定番のテンプレート図をまとめて配置できます。配置後は1つのまとまりとして扱われる（どれか1つをタップすると全体が選択される）ので、そのまま移動もできますし、✂️ボタンでグループ解除してパーツごとに自由に編集することもできます。各ラベルの文字はダブルタップして書き換えられます。</li>
           <li><b>▦ 表（テーブル）</b>: メニューの「▦ 表」から行数・列数を指定して挿入します。各セルは文字を入力すると自動で折り返され（改行され）、文字が増えてセルの高さが足りなくなると、その行の高さが自動的に広がります。</li>
         </ul>
       </div>
@@ -949,6 +991,21 @@
     </div>
   </div>
 
+  <!-- 汎用の確認ダイアログ。ネイティブの confirm() は、環境によって
+       （一部のWebView・PWAシェルなど）正しく表示されない／常にfalse扱いに
+       なってしまう場合があり、ボタンを押しても反応がないように見える不具合の
+       原因になっていたため、全OS・全端末で確実に同じ見た目・挙動になる
+       自前のダイアログに置き換えた（ページ削除など、元に戻せない操作の確認に使用）。 -->
+  <div id="confirm-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width:340px; text-align:center;">
+      <p id="confirm-modal-text" style="margin:4px 0 18px; line-height:1.6; white-space:pre-wrap;"></p>
+      <div style="display:flex; gap:10px;">
+        <button id="confirm-modal-ok-btn" style="flex:1; background:#dc3545;">OK</button>
+        <button id="confirm-modal-cancel-btn" style="flex:1; background:#6c757d;">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const STORAGE_KEY = 'smart_memo_canvas_data_v26';
     const GRID_SIZE = 40; // 破線の方眼1マスのサイズ(px)。下記PX_PER_MM換算でおよそ1cm相当
@@ -963,10 +1020,14 @@
 
     // 日本国内でよく使われるJIS規格の寸法（mm）。B4/B5はISO B列とは異なるJIS B列の値。
     const PAPER_SIZES_MM = {
+      a6: { w: 105, h: 148 },
+      b6: { w: 128, h: 182 },
+      a5: { w: 148, h: 210 },
       b5: { w: 182, h: 257 },
       a4: { w: 210, h: 297 },
       b4: { w: 257, h: 364 },
-      a3: { w: 297, h: 420 }
+      a3: { w: 297, h: 420 },
+      letter: { w: 215.9, h: 279.4 }
     };
 
     // 選択中の用紙キー（例: 'a4-portrait'）から、canvas単位(px)・mm両方の
@@ -1134,6 +1195,41 @@
       return !!(obj && (obj.isOriginMark || obj.isConnectorPreviewLine || obj.isLockBadge));
     }
 
+    // 「文字要素」かどうかの判定（i-text と、自動折り返し対応のtextboxの両方を含む）。
+    // 以前はあちこちで obj.type === 'i-text' と直接比較していたが、自由入力テキストを
+    // 自動折り返し対応のfabric.Textboxへ切り替えたことに伴い、両方を等しく
+    // 「テキストとして扱う」ための共通ヘルパーに統一した。
+    function isTextLikeObject(obj) {
+      return !!(obj && (obj.type === 'i-text' || obj.type === 'textbox'));
+    }
+
+    // ============================================================
+    // 📝 テキストの画面幅自動折り返し
+    // ・新規入力／再編集で実際に文字を入力している間だけ、画面の右端に
+    //   合わせて自動的に改行する（fabric.Textboxのwidthプロパティを使用）。
+    // ・編集を終えた時点のwidthは通常のプロパティとしてそのまま保存されるため、
+    //   後で画面サイズが変わっても、そのテキストの改行位置は変わらない
+    //   （「編集時点の画面幅で固定」という要望を、明示的な再計算をしないことで
+    //   自然に満たしている）。
+    // ・再編集（ダブルタップ）で画面右端とテキストの位置関係が変わっていた場合は、
+    //   編集を始めた瞬間ではなく、実際に1文字でも変更が入った瞬間に
+    //   改めて現在の画面幅で折り返し直す。
+    // ============================================================
+    const TEXT_WRAP_RIGHT_MARGIN = 24; // 画面右端ギリギリまで文字を詰めないための余白(px)
+    const TEXT_WRAP_MIN_WIDTH = 60; // 極端に狭くなりすぎないための下限
+
+    // 画面（ウィンドウ）右端に対応する、キャンバスのオブジェクト座標系でのX座標
+    function getScreenRightEdgeObjectX() {
+      const screenRightPx = canvas.getWidth() - TEXT_WRAP_RIGHT_MARGIN;
+      const inv = fabric.util.invertTransform(canvas.viewportTransform);
+      return fabric.util.transformPoint({ x: screenRightPx, y: 0 }, inv).x;
+    }
+
+    // テキストの現在位置(left)から画面右端までの幅を、折り返しに使う最大幅として返す
+    function computeWrapWidthForPosition(leftX) {
+      return Math.max(TEXT_WRAP_MIN_WIDTH, getScreenRightEdgeObjectX() - leftX);
+    }
+
     // ダブルタップ/ダブルクリックで「テキストモードに入るのを諦めて
     // 既存要素の選択・編集に譲るべきか」を判定する。
     // テキスト(i-text)は、ダブルタップ自体が既に「編集モードに入る」
@@ -1145,7 +1241,7 @@
     // 長押し／選択モード／Ctrlクリックに統一）。
     function blocksDoubleTapTextCreation(target) {
       if (!target || isGuideObject(target)) return false;
-      return target.type === 'i-text';
+      return isTextLikeObject(target);
     }
 
     // 背景に敷き詰めるタイル画像を1枚生成する。
@@ -1183,7 +1279,7 @@
     }
     function drawMusicStaffPattern(ctx, tileW, tileH, color) {
       // 5本1組の五線譜を、一定の間隔を空けながら縦に並べる
-      const lineGap = Math.max(8, Math.round(GRID_SIZE / 5));
+      const lineGap = Math.max(8, Math.round(GRID_SIZE / 5 * 1.2)); // 従来の1.2倍の幅に
       const groupGap = lineGap * 4;
       ctx.strokeStyle = color;
       ctx.lineWidth = 1;
@@ -1200,7 +1296,7 @@
     function drawEnglish4LinePattern(ctx, tileW, tileH, color, accentColor) {
       // 4本1組（上端線・中間線(破線)・ベースライン(強調)・下端線）を縦に繰り返す。
       // 上から3本目＝ベースラインだけ太く・色を変えて強調する。
-      const lineGap = Math.max(12, Math.round(GRID_SIZE * 0.6));
+      const lineGap = Math.max(12, Math.round(GRID_SIZE * 0.6 * 1.2)); // 従来の1.2倍の幅に
       const groupHeight = lineGap * 3;
       const groupGapExtra = lineGap * 2.2;
       let y = lineGap;
@@ -1228,23 +1324,34 @@
       }
     }
     function drawCabinetGridPattern(ctx, tileW, tileH, size, color) {
-      // キャビネット図（斜投影図）用：縦横の格子に45度の斜線を重ね、三角格子にする
+      // キャビネット図（斜投影図）用の三角格子。
+      // 以前は縦横の格子に45度の斜線を重ねるだけだったため、できる三角形が
+      // 直角二等辺三角形になってしまっていた。正しくは、0度・60度・120度の
+      // 3方向の平行線を「同じ垂直間隔」で並べることで、一辺=size の正三角形が
+      // 隙間なく並ぶ格子になる（垂直間隔 = size * sin60° = size * √3/2）。
+      // タイルの幅・高さは呼び出し側（generateGridPattern）でこの格子の
+      // 周期（幅=size, 高さ=size*√3）に合わせてあるので、タイルとして
+      // 繰り返し敷き詰めても継ぎ目がずれない。
       ctx.strokeStyle = color;
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
-      for (let gy = 0; gy < tileH; gy += size) {
-        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(tileW, gy); ctx.stroke();
-      }
-      for (let gx = 0; gx < tileW; gx += size) {
-        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, tileH); ctx.stroke();
-      }
-      const diag = Math.max(tileW, tileH) * 2;
-      for (let gx = -diag; gx < tileW + diag; gx += size) {
-        ctx.beginPath();
-        ctx.moveTo(gx, tileH);
-        ctx.lineTo(gx + tileH, 0);
-        ctx.stroke();
-      }
+      const step = size * Math.sqrt(3) / 2;
+      const margin = size * 2;
+      const angles = [0, 60, 120];
+      angles.forEach(angleDeg => {
+        const theta = angleDeg * Math.PI / 180;
+        const dirX = Math.cos(theta), dirY = Math.sin(theta);
+        const perpX = -Math.sin(theta), perpY = Math.cos(theta);
+        const diag = tileW + tileH + margin;
+        const count = Math.ceil((diag) / step) + 2;
+        for (let n = -count; n <= count; n++) {
+          const ox = perpX * n * step, oy = perpY * n * step;
+          ctx.beginPath();
+          ctx.moveTo(ox - dirX * diag, oy - dirY * diag);
+          ctx.lineTo(ox + dirX * diag, oy + dirY * diag);
+          ctx.stroke();
+        }
+      });
     }
 
     function generateGridPattern(bgColor, paperSizeKey, patternType) {
@@ -1256,8 +1363,16 @@
       const accentColor = isDark ? '#6ea8fe' : '#2f6fed';
 
       const paperPx = getPaperSizePx(paperSizeKey);
-      const tileW = paperPx ? Math.round(paperPx.w) : GRID_SIZE;
-      const tileH = paperPx ? Math.round(paperPx.h) : GRID_SIZE;
+      // キャビネット図（三角格子）は、正三角形の格子がタイルの継ぎ目でぴったり
+      // 続くよう、格子の周期（幅=GRID_SIZE、高さ=GRID_SIZE*√3）に合わせた
+      // タイルサイズを使う（用紙サイズ指定が無いときのみ。指定がある場合は
+      // 従来通り用紙サイズをタイルにする）。
+      let tileW = paperPx ? Math.round(paperPx.w) : GRID_SIZE;
+      let tileH = paperPx ? Math.round(paperPx.h) : GRID_SIZE;
+      if (!paperPx && (patternType === 'cabinet')) {
+        tileW = GRID_SIZE;
+        tileH = Math.round(GRID_SIZE * Math.sqrt(3));
+      }
 
       const patternCanvas = document.createElement('canvas');
       patternCanvas.width = tileW;
@@ -1449,7 +1564,7 @@
 
       const willSelect = target && !isGuideObject(target) && !target.isLocked && (
         canvas.getActiveObject() === target || // 既に選択中のオブジェクトへの単純クリック＆ドラッグは常に「移動」として扱う
-        (target.type === 'i-text' && clickCount >= 2)
+        (isTextLikeObject(target) && clickCount >= 2)
       );
 
       canvas.isDrawingMode = !willSelect && (currentDrawMode === 'pen' || currentDrawMode === 'highlighter');
@@ -2248,6 +2363,25 @@
       canvas.bringToFront(l);
       snapGuideLines.push(l);
     }
+    // ドラッグ中、他のすべてのオブジェクトのバウンディングボックスを毎回
+    // 計算し直すと（特に要素数が多いページで）動きがカクカクする原因になるため、
+    // 1回のドラッグの最初のフレームだけ計算してキャッシュし、指を離すまで使い回す。
+    // 他のオブジェクトはドラッグ中に動かないので、これで見た目上の破綻はない。
+    let snapCandidateCache = null;
+    let snapCacheTargetObj = null;
+    function buildSnapCandidateCache(target) {
+      snapCandidateCache = [];
+      canvas.getObjects().forEach(o => {
+        if (o === target || isGuideObject(o) || o.isConnectorLine || o.arrowOwnerId || o.labelForLineId) return;
+        if (o.groupId && target.groupId && o.groupId === target.groupId) return;
+        const ob = o.getBoundingRect(true, true);
+        snapCandidateCache.push({
+          left: ob.left, right: ob.left + ob.width, centerX: ob.left + ob.width / 2,
+          top: ob.top, bottom: ob.top + ob.height, centerY: ob.top + ob.height / 2
+        });
+      });
+      snapCacheTargetObj = target;
+    }
     function handleSnapping(opt) {
       const target = opt.target;
       clearSnapGuides();
@@ -2255,6 +2389,8 @@
       if (isPanLockMode || currentDrawMode === 'eraser' || currentDrawMode === 'connector' ||
           currentDrawMode === 'lasso' || currentDrawMode === 'eyedropper') return;
       if (target.isConnectorLine || target.arrowOwnerId || target.labelForLineId || target.isLocked) return;
+
+      if (snapCacheTargetObj !== target) buildSnapCandidateCache(target);
 
       const zoom = canvas.getZoom();
       const threshold = SNAP_THRESHOLD_PX / zoom;
@@ -2265,12 +2401,9 @@
 
       let snapDX = 0, snapDY = 0, foundX = null, foundY = null;
 
-      canvas.getObjects().forEach(o => {
-        if (o === target || isGuideObject(o) || o.isConnectorLine || o.arrowOwnerId || o.labelForLineId) return;
-        if (o.groupId && target.groupId && o.groupId === target.groupId) return;
-        const ob = o.getBoundingRect(true, true);
-        const oLeft = ob.left, oRight = ob.left + ob.width, oCenterX = ob.left + ob.width / 2;
-        const oTop = ob.top, oBottom = ob.top + ob.height, oCenterY = ob.top + ob.height / 2;
+      snapCandidateCache.forEach(ob => {
+        const oLeft = ob.left, oRight = ob.right, oCenterX = ob.centerX;
+        const oTop = ob.top, oBottom = ob.bottom, oCenterY = ob.centerY;
 
         [[tLeft, oLeft], [tLeft, oRight], [tRight, oLeft], [tRight, oRight], [tCenterX, oCenterX]].forEach(([tv, ov]) => {
           const d = ov - tv;
@@ -2282,12 +2415,18 @@
         });
       });
 
-      // 対象となる他のオブジェクトが無かった軸は、背景の方眼グリッド（中心を基準）に吸着させる
-      if (foundX === null) {
+      // 対象となる他のオブジェクトが無かった軸は、背景の方眼グリッド（中心を基準）に吸着させる。
+      // ただし、実際に画面に見えている罫線の種類によって「基準線が存在する向き」が
+      // 異なるため、その向きだけスナップさせる（例：横罫線しかない背景でX軸まで
+      // スナップすると、何もない場所に突然ガイド線が出てしまう不具合があったため）。
+      const bgPattern = bgPatternSelect ? bgPatternSelect.value : 'grid';
+      const gridSnapX = (bgPattern === 'grid' || bgPattern === 'grid-export' || bgPattern === 'cabinet' || bgPattern === 'lines-v');
+      const gridSnapY = (bgPattern === 'grid' || bgPattern === 'grid-export' || bgPattern === 'cabinet' || bgPattern === 'lines-h');
+      if (foundX === null && gridSnapX) {
         const nearestGridX = Math.round(tCenterX / GRID_SIZE) * GRID_SIZE;
         if (Math.abs(nearestGridX - tCenterX) < threshold) { snapDX = nearestGridX - tCenterX; foundX = nearestGridX; }
       }
-      if (foundY === null) {
+      if (foundY === null && gridSnapY) {
         const nearestGridY = Math.round(tCenterY / GRID_SIZE) * GRID_SIZE;
         if (Math.abs(nearestGridY - tCenterY) < threshold) { snapDY = nearestGridY - tCenterY; foundY = nearestGridY; }
       }
@@ -2303,7 +2442,11 @@
       if (foundX !== null || foundY !== null) target.setCoords();
     }
     canvas.on('object:moving', handleSnapping);
-    canvas.on('mouse:up', clearSnapGuides);
+    canvas.on('mouse:up', function() {
+      clearSnapGuides();
+      snapCandidateCache = null;
+      snapCacheTargetObj = null;
+    });
 
     canvas.on('object:moving', handleConnectorTransformUpdate);
     canvas.on('object:scaling', handleConnectorTransformUpdate);
@@ -2437,7 +2580,7 @@
       // 瞬間にソフトウェアキーボードがせり上がってしまう不具合があった。
       // タッチ由来のイベントでは実行しないようにする。
       const isTouchOriginated = !!(evt.touches || evt.changedTouches || evt.pointerType === 'touch');
-      if (!isTouchOriginated && (!target || target.type !== 'i-text')) dummyInput.focus();
+      if (!isTouchOriginated && (!target || !isTextLikeObject(target))) dummyInput.focus();
 
       // ロックアイコン（長押し選択時に表示される🔒/🔓）がタップされた場合の処理。
       // 対象オブジェクトの固定/固定解除をトグルする。固定中は selectable=false にして
@@ -2570,9 +2713,9 @@
       // クリック回数のカウントは precomputeInteractionMode 側で既に行っているため、
       // ここでは結果(clickCount / lastTarget)を使って実際の選択処理のみ行う。
       // 手書き線(path)の3回連打による選択は廃止（長押し等に統一）。
-      if (target && !isGuideObject(target) && !target.isLocked && target.type === 'i-text' && clickCount >= 2) {
+      if (target && !isGuideObject(target) && !target.isLocked && isTextLikeObject(target) && clickCount >= 2) {
         canvas.setActiveObject(target);
-        if (target.type === 'i-text') {
+        if (isTextLikeObject(target)) {
           target.enterEditing();
           textColorInput.value = target.fill || '#222222';
           textColorInput.updateSwatch && textColorInput.updateSwatch();
@@ -2774,7 +2917,7 @@
     function onSelection(e) {
       if (expandToFullGroupIfNeeded()) return; // 展開後のselection:createdが再度onSelectionを呼ぶので、ここでは何もしない
       const activeObject = e.selected ? e.selected[0] : canvas.getActiveObject();
-      if (activeObject && activeObject.type === 'i-text') {
+      if (activeObject && isTextLikeObject(activeObject)) {
         textColorInput.value = activeObject.fill || '#222222';
         textColorInput.updateSwatch && textColorInput.updateSwatch();
         fontSizeInput.value = activeObject.fontSize || 22;
@@ -2879,6 +3022,16 @@
 
     function setDrawMode(mode) {
       currentDrawMode = mode;
+      // ペン/マーカー/レーザーなど明示的なツールを選んだら、選択モード・画面移動固定は
+      // 自動的に解除する。refreshToolButtonHighlights()はisSelectMode/isPanLockModeを
+      // 見て「選択中は他のツールボタンを光らせない」判定をするため、ここを
+      // refreshToolButtonHighlights()より先に済ませておかないと、選択モードから
+      // 別ツールに切り替えた直後の1回だけボタンの色が反映されない不具合があった
+      // （例：選択モード中にレーザーを押しても、レーザーボタンが選択中の見た目のまま）。
+      if (isSelectMode) {
+        isSelectMode = false;
+        selectModeBtn.classList.remove('active');
+      }
       refreshToolButtonHighlights();
       maskModeBtn.classList.toggle('active', mode === 'mask');
       // なげなわ選択は専用ボタンを持たず「選択」ボタンに統合しているため、
@@ -2886,11 +3039,6 @@
       selectModeBtn.classList.toggle('active', mode === 'lasso');
       selectModeBtn.textContent = (mode === 'lasso') ? '🪢 なげなわ' : '👆 選択';
       if (mode !== 'eyedropper') upperCanvasEl.style.cursor = '';
-      // ペン/マーカー/消しゴムなど明示的なツールを選んだら、選択モードは自動的に解除する
-      if (isSelectMode) {
-        isSelectMode = false;
-        selectModeBtn.classList.remove('active');
-      }
       // コネクタモードから離れる場合、選択待ちだった1つ目の要素の見た目を元に戻し、
       // 開いたままの線種選択ポップアップがあれば閉じる
       if (mode !== 'connector') {
@@ -3144,20 +3292,42 @@
       autoSaveLocal();
     });
 
+    // 汎用確認ダイアログ（ネイティブconfirm()の代わり。詳細は上のHTML側コメント参照）
+    const confirmModal = document.getElementById('confirm-modal');
+    const confirmModalText = document.getElementById('confirm-modal-text');
+    const confirmModalOkBtn = document.getElementById('confirm-modal-ok-btn');
+    const confirmModalCancelBtn = document.getElementById('confirm-modal-cancel-btn');
+    let confirmModalOnOk = null;
+    function showConfirmModal(message, onOk) {
+      confirmModalText.textContent = message;
+      confirmModalOnOk = onOk;
+      confirmModal.classList.add('active');
+    }
+    function closeConfirmModal() {
+      confirmModal.classList.remove('active');
+      confirmModalOnOk = null;
+    }
+    confirmModalOkBtn.addEventListener('click', () => {
+      const fn = confirmModalOnOk;
+      closeConfirmModal();
+      if (fn) fn();
+    });
+    confirmModalCancelBtn.addEventListener('click', closeConfirmModal);
+
     document.getElementById('delete-page-btn').addEventListener('click', () => {
       if (pagesData.length <= 1) {
         alert('これ以上ページを減らせません。');
         return;
       }
 
-      if (confirm(`現在のページ（${currentPageIndex + 1}ページ目）を削除しますか？`)) {
+      showConfirmModal(`現在のページ（${currentPageIndex + 1}ページ目）を削除しますか？`, () => {
         pagesData.splice(currentPageIndex, 1);
         if (currentPageIndex >= pagesData.length) {
           currentPageIndex = pagesData.length - 1;
         }
         switchPage(currentPageIndex);
         autoSaveLocal();
-      }
+      });
     });
 
     const penColorInput = document.getElementById('pen-color');
@@ -3306,7 +3476,7 @@
         const targets = activeObject._objects ? activeObject._objects : [activeObject];
         let changed = false;
         targets.forEach(obj => {
-          if (isGuideObject(obj) || obj.type === 'i-text' || obj.type === 'image') return;
+          if (isGuideObject(obj) || isTextLikeObject(obj) || obj.type === 'image') return;
           obj.set('stroke', penColorInput.value);
           // 塗りつぶしがある図形（透明でない）は塗りの色も合わせて変える。
           // ただし当たり判定のためだけに極薄の塗り(rgba(0,0,0,0.01))を
@@ -3330,7 +3500,7 @@
 
     fontSelect.addEventListener('change', (e) => {
       const activeObject = canvas.getActiveObject();
-      if (activeObject && activeObject.type === 'i-text') {
+      if (activeObject && isTextLikeObject(activeObject)) {
         activeObject.set('fontFamily', e.target.value);
         canvas.renderAll();
         saveState();
@@ -3340,7 +3510,7 @@
     fontSizeInput.addEventListener('input', (e) => {
       const newSize = parseInt(e.target.value, 10) || 22;
       const activeObject = canvas.getActiveObject();
-      if (activeObject && activeObject.type === 'i-text') {
+      if (activeObject && isTextLikeObject(activeObject)) {
         activeObject.set('fontSize', newSize);
         canvas.renderAll();
         saveState();
@@ -3349,7 +3519,7 @@
 
     textColorInput.addEventListener('input', (e) => {
       const activeObject = canvas.getActiveObject();
-      if (activeObject && activeObject.type === 'i-text') {
+      if (activeObject && isTextLikeObject(activeObject)) {
         activeObject.set('fill', e.target.value);
         canvas.renderAll();
         saveState();
@@ -3536,7 +3706,19 @@
     deleteSelectedBtn.addEventListener('click', deleteSelectedObjects);
     duplicateSelectedBtn.addEventListener('click', duplicateSelectedObjects);
     attachTapHold(alignLeftBtn, { onTap: alignSelectedObjectsLeft, onHold: stackSelectedObjectsVertically });
-    ocrBtn.addEventListener('click', recognizeSelectedHandwriting);
+    ocrBtn.addEventListener('click', () => {
+      // 選択中の手書きがあり、まだ自動OCRモードでない場合は、
+      // 従来通りその場で1回だけ文字認識する（後方互換）。
+      // それ以外（選択が無い、またはすでに自動モード中）は、
+      // 「描画するたびに自動でOCRする」モードのON/OFF切り替えとして扱う。
+      const active = canvas.getActiveObject();
+      const hasSelection = !!(active && !isGuideObject(active));
+      if (!ocrAutoMode && hasSelection) {
+        recognizeSelectedHandwriting();
+      } else {
+        setOcrAutoMode(!ocrAutoMode);
+      }
+    });
     attachTapHold(eraserModeBtn, { onTap: eraserModeTap, onHold: eraserModeHold });
 
     // --- グループ化 ---
@@ -3668,7 +3850,7 @@
       if (isExpandingGroupSelection) return false;
       if (suppressGroupAutoExpand) { suppressGroupAutoExpand = false; return false; }
       const active = canvas.getActiveObject();
-      if (!active || active.type === 'activeSelection' || active.type === 'i-text') return false;
+      if (!active || active.type === 'activeSelection' || isTextLikeObject(active)) return false;
       const gid = active.groupId;
       if (!gid) return false;
       // ロック中のメンバーは、グループの一員であっても自動展開には含めない。
@@ -3714,7 +3896,9 @@
       const hasSelection = !!(activeObjects && activeObjects.length > 0);
       deleteSelectedBtn.disabled = !hasSelection;
       duplicateSelectedBtn.disabled = !hasSelection;
-      ocrBtn.disabled = !hasSelection;
+      // OCRボタンは「選択中の手書きを認識する」だけでなく「自動OCRモードの
+      // ON/OFF切り替え」も兼ねるようになったため、選択が無くても常に押せる
+      // ようにする（自動モードは描画前にONにしておく必要があるため）。
       updateGroupButtonState();
     }
 
@@ -4335,10 +4519,12 @@
       let posX = lastHandwritingBounds ? lastHandwritingBounds.left : center.x;
       let posY = lastHandwritingBounds ? lastHandwritingBounds.top : center.y;
 
-      const text = new fabric.IText('', {
+      const text = new fabric.Textbox('', {
         left: posX, top: posY, fontSize: parseInt(fontSizeInput.value, 10) || 22,
         fill: textColorInput.value, fontFamily: fontSelect.value,
-        editingBorderColor: '#0d3b8c' // 編集中の点線枠の視認性を高めるため濃い色にする
+        editingBorderColor: '#0d3b8c', // 編集中の点線枠の視認性を高めるため濃い色にする
+        width: computeWrapWidthForPosition(posX),
+        splitByGrapheme: true // 日本語など単語区切りの無い文でも折り返せるように
       });
 
       canvas.add(text);
@@ -4374,15 +4560,26 @@
       if (currentDrawMode === 'eraser') setDrawMode('pen');
       options = options || {};
       const centered = !!options.centered;
-      const text = new fabric.IText('', {
-        left: x, top: y,
-        originX: centered ? 'center' : 'left',
-        originY: centered ? 'center' : 'top',
-        textAlign: centered ? 'center' : 'left',
-        fontSize: parseInt(fontSizeInput.value, 10) || 22,
-        fill: textColorInput.value, fontFamily: fontSelect.value,
-        editingBorderColor: '#0d3b8c' // 編集中の点線枠の視認性を高めるため濃い色にする
-      });
+      // 図形に紐づく短いラベル（centered）は今まで通り自由に伸び縮みするIText、
+      // 何もない場所に打つ自由記述のテキストは、画面右端に合わせて自動折り返し
+      // できるようTextboxにする。
+      const text = centered
+        ? new fabric.IText('', {
+            left: x, top: y,
+            originX: 'center', originY: 'center', textAlign: 'center',
+            fontSize: parseInt(fontSizeInput.value, 10) || 22,
+            fill: textColorInput.value, fontFamily: fontSelect.value,
+            editingBorderColor: '#0d3b8c'
+          })
+        : new fabric.Textbox('', {
+            left: x, top: y,
+            originX: 'left', originY: 'top', textAlign: 'left',
+            fontSize: parseInt(fontSizeInput.value, 10) || 22,
+            fill: textColorInput.value, fontFamily: fontSelect.value,
+            editingBorderColor: '#0d3b8c', // 編集中の点線枠の視認性を高めるため濃い色にする
+            width: computeWrapWidthForPosition(x),
+            splitByGrapheme: true // 日本語など単語区切りの無い文でも折り返せるように
+          });
       canvas.add(text);
       canvas.setActiveObject(text);
       text.enterEditing();
@@ -4430,8 +4627,11 @@
       // 映したくないため、一時的に無地の背景色へ差し替えてから書き出し、
       // 終わったら元のパターンに戻す。JPEGは透過を持てないため、
       // どちらにしても不透明な背景色に揃えておく必要がある。
+      // ただし罫線が「方眼（出力あり）」の場合だけは、書き出し後もそのまま
+      // 格子模様を残したいので、この差し替えをスキップする。
+      const keepGridInExport = bgPatternSelect && bgPatternSelect.value === 'grid-export';
       const originalBackground = canvas.backgroundColor;
-      canvas.backgroundColor = bgStyleSelect.value;
+      if (!keepGridInExport) canvas.backgroundColor = bgStyleSelect.value;
 
       canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
       canvas.renderAll();
@@ -4576,9 +4776,10 @@
         const originalBackground = canvas.backgroundColor;
         let pdf, pageAdded = false;
 
+        const keepGridInExport = bgPatternSelect && bgPatternSelect.value === 'grid-export';
         try {
           if (originMark) originMark.visible = false;
-          canvas.backgroundColor = bgStyleSelect.value;
+          if (!keepGridInExport) canvas.backgroundColor = bgStyleSelect.value;
           canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
           canvas.renderAll();
 
@@ -4998,6 +5199,49 @@
     // ============================================================
     const OCR_API_KEY = 'helloworld';
 
+    // 🔤 自動OCRモード：OCRボタンを先にONにしておくと、以後は手書きを
+    // 選択してボタンを押さなくても、1画（ストローク）を描き終えて
+    // 0.5秒ほど間があいたタイミングで自動的にOCRが走る。連続して素早く
+    // 書いた複数画（例：漢字の複数ストローク）はまとめて1回のOCR対象にする
+    // ため、新しい画が増えるたびにタイマーを延長している。
+    let ocrAutoMode = false;
+    let ocrAutoTimer = null;
+    let ocrAutoPendingPaths = [];
+    const OCR_AUTO_DELAY_MS = 500;
+
+    function setOcrAutoMode(on) {
+      ocrAutoMode = on;
+      ocrBtn.classList.toggle('active', ocrAutoMode);
+      if (!ocrAutoMode) {
+        if (ocrAutoTimer) { clearTimeout(ocrAutoTimer); ocrAutoTimer = null; }
+        ocrAutoPendingPaths = [];
+      }
+    }
+
+    canvas.on('path:created', function(opt) {
+      if (!ocrAutoMode) return;
+      const path = opt.path;
+      if (!path || path.isMemoryMask) return;
+      ocrAutoPendingPaths.push(path);
+      if (ocrAutoTimer) clearTimeout(ocrAutoTimer);
+      ocrAutoTimer = setTimeout(runAutoOcr, OCR_AUTO_DELAY_MS);
+    });
+
+    function runAutoOcr() {
+      ocrAutoTimer = null;
+      const targets = ocrAutoPendingPaths.filter(p => canvas.getObjects().indexOf(p) !== -1);
+      ocrAutoPendingPaths = [];
+      if (targets.length === 0 || !ocrAutoMode) return;
+      canvas.discardActiveObject();
+      if (targets.length === 1) {
+        canvas.setActiveObject(targets[0]);
+      } else {
+        canvas.setActiveObject(new fabric.ActiveSelection(targets, { canvas: canvas }));
+      }
+      canvas.requestRenderAll();
+      recognizeSelectedHandwriting(true); // silent=true：自動モード中は失敗のたびにアラートを出さない
+    }
+
     function updateOcrAvailability() {
       if (!navigator.onLine) {
         ocrBtn.title = '文字認識（インターネット接続が必要です・現在オフラインのため使えません）';
@@ -5009,9 +5253,9 @@
     window.addEventListener('offline', updateOcrAvailability);
     updateOcrAvailability();
 
-    async function recognizeSelectedHandwriting() {
+    async function recognizeSelectedHandwriting(silent) {
       if (!navigator.onLine) {
-        alert('文字認識にはインターネット接続が必要です。オンラインの状態でもう一度お試しください。');
+        if (!silent) alert('文字認識にはインターネット接続が必要です。オンラインの状態でもう一度お試しください。');
         return;
       }
       const active = canvas.getActiveObject();
@@ -5019,7 +5263,7 @@
         ? active._objects.slice() : (active ? [active] : []);
       const paths = targets.filter(o => !isGuideObject(o) && !o.isConnectorLine && !o.arrowOwnerId && !o.labelForLineId);
       if (paths.length === 0) {
-        alert('文字認識したい手書き文字を選択してください。');
+        if (!silent) alert('文字認識したい手書き文字を選択してください。');
         return;
       }
 
@@ -5072,7 +5316,7 @@
         }
         const text = ((json.ParsedResults && json.ParsedResults[0] && json.ParsedResults[0].ParsedText) || '').trim();
         if (!text) {
-          alert('文字を認識できませんでした。もう少しはっきりした文字でお試しください。');
+          if (!silent) alert('文字を認識できませんでした。もう少しはっきりした文字でお試しください。');
           return;
         }
 
@@ -5398,6 +5642,185 @@
       });
     });
 
+    // ============================================================
+    // 🧠 思考ツール（クラゲチャート・Yチャート・フィッシュボーン図・ベン図）
+    // 複数の図形・文字をまとめて配置し、既存のグループ機能（groupId）で
+    // 1つのまとまりとして扱えるようにする（どれか1つをタップすると全体が
+    // 選択され、まとめて移動できる）。
+    // ============================================================
+    const insertThinkingToolBtn = document.getElementById('insert-thinking-tool-btn');
+    const insertThinkingToolPopup = document.getElementById('insert-thinking-tool-popup');
+    insertThinkingToolBtn.addEventListener('click', () => {
+      openFloatingPopup(insertThinkingToolPopup, insertThinkingToolBtn);
+    });
+    insertThinkingToolPopup.querySelectorAll('.thinking-tool-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        insertThinkingTool(btn.dataset.tool);
+        closeFloatingPopup(insertThinkingToolPopup);
+      });
+    });
+
+    function finalizeGroupedInsert(objs) {
+      objs.forEach(o => canvas.add(o));
+      if (objs.length > 1) {
+        const gid = generateGroupId();
+        objs.forEach(o => { o.groupId = gid; });
+      }
+      canvas.discardActiveObject();
+      if (objs.length === 1) {
+        canvas.setActiveObject(objs[0]);
+      } else {
+        canvas.setActiveObject(new fabric.ActiveSelection(objs, { canvas }));
+      }
+      canvas.requestRenderAll();
+      saveState();
+    }
+
+    function insertThinkingTool(toolType) {
+      if (toolType === 'jellyfish') insertJellyfishChart();
+      else if (toolType === 'ychart') insertYChart();
+      else if (toolType === 'fishbone') insertFishboneChart();
+      else if (toolType === 'venn') insertVennDiagram();
+    }
+
+    // 🪼 クラゲチャート：頭（テーマ・主張）から複数の足（理由）が伸びる形。
+    // 「なぜそう思う？」の理由づけを整理するのに使う定番の思考ツール。
+    function insertJellyfishChart() {
+      const center = getCenterPosition();
+      const color = penColorInput.value;
+      const legCount = 5;
+      const headRX = 75, headRY = 45;
+      const headCY = center.y - 95;
+      const legRadius = 26;
+      const spread = 230;
+      const legY = center.y + 75;
+
+      const objs = [];
+      objs.push(new fabric.Ellipse({
+        left: center.x, top: headCY, rx: headRX, ry: headRY,
+        originX: 'center', originY: 'center',
+        stroke: color, strokeWidth: 2, fill: 'transparent'
+      }));
+      objs.push(new fabric.IText('テーマ', {
+        left: center.x, top: headCY, originX: 'center', originY: 'center',
+        fontSize: 15, fill: color, fontFamily: fontSelect.value, textAlign: 'center'
+      }));
+
+      for (let i = 0; i < legCount; i++) {
+        const t = legCount === 1 ? 0.5 : i / (legCount - 1);
+        const legX = center.x - spread / 2 + spread * t;
+        const startX = center.x - headRX * 0.7 + headRX * 1.4 * t;
+        const startY = headCY + headRY * 0.85;
+        const midX = (startX + legX) / 2 + (i % 2 === 0 ? 10 : -10);
+        const midY = (startY + legY) / 2;
+        objs.push(new fabric.Path(
+          `M ${startX} ${startY} Q ${midX} ${midY} ${legX} ${legY}`,
+          { stroke: color, strokeWidth: 2, fill: '' }
+        ));
+        objs.push(new fabric.Ellipse({
+          left: legX, top: legY, rx: legRadius, ry: legRadius,
+          originX: 'center', originY: 'center',
+          stroke: color, strokeWidth: 2, fill: 'transparent'
+        }));
+        objs.push(new fabric.IText('理由' + (i + 1), {
+          left: legX, top: legY, originX: 'center', originY: 'center',
+          fontSize: 13, fill: color, fontFamily: fontSelect.value, textAlign: 'center'
+        }));
+      }
+      finalizeGroupedInsert(objs);
+    }
+
+    // 🔺 Yチャート：円を3つの区画に分け、それぞれ違う視点（見た目・気持ち・音 等）
+    // からテーマを観察・分析するための思考ツール。
+    function insertYChart() {
+      const center = getCenterPosition();
+      const color = penColorInput.value;
+      const r = 110;
+      const objs = [];
+      objs.push(new fabric.Ellipse({
+        left: center.x, top: center.y, rx: r, ry: r,
+        originX: 'center', originY: 'center', stroke: color, strokeWidth: 2, fill: 'transparent'
+      }));
+      [-90, 30, 150].forEach(a => {
+        const rad = a * Math.PI / 180;
+        const ex = center.x + r * Math.cos(rad);
+        const ey = center.y + r * Math.sin(rad);
+        objs.push(new fabric.Line([center.x, center.y, ex, ey], { stroke: color, strokeWidth: 2 }));
+      });
+      const labels = ['見た目', '気持ち', '音'];
+      [-30, 90, 210].forEach((a, i) => {
+        const rad = a * Math.PI / 180;
+        const lx = center.x + r * 0.55 * Math.cos(rad);
+        const ly = center.y + r * 0.55 * Math.sin(rad);
+        objs.push(new fabric.IText(labels[i], {
+          left: lx, top: ly, originX: 'center', originY: 'center',
+          fontSize: 14, fill: color, fontFamily: fontSelect.value, textAlign: 'center'
+        }));
+      });
+      finalizeGroupedInsert(objs);
+    }
+
+    // 🐟 フィッシュボーン図（特性要因図）：結果・課題に対して、そこに影響する
+    // 要因を背骨から伸びる骨のように整理する思考ツール。
+    function insertFishboneChart() {
+      const center = getCenterPosition();
+      const color = penColorInput.value;
+      const spineLen = 320;
+      const startX = center.x - spineLen / 2, endX = center.x + spineLen / 2;
+      const y = center.y;
+      const objs = [];
+      objs.push(new fabric.Line([startX, y, endX, y], { stroke: color, strokeWidth: 2 }));
+      objs.push(new fabric.Rect({
+        left: endX + 10, top: y, width: 100, height: 50, originY: 'center',
+        stroke: color, strokeWidth: 2, fill: 'transparent'
+      }));
+      objs.push(new fabric.IText('結果・課題', {
+        left: endX + 60, top: y, originX: 'center', originY: 'center',
+        fontSize: 13, fill: color, fontFamily: fontSelect.value, textAlign: 'center'
+      }));
+      const boneCount = 4;
+      for (let i = 0; i < boneCount; i++) {
+        const bx = startX + spineLen * ((i + 1) / (boneCount + 1));
+        const up = i % 2 === 0;
+        const by = y + (up ? -70 : 70);
+        objs.push(new fabric.Line([bx, y, bx + 40, by], { stroke: color, strokeWidth: 2 }));
+        objs.push(new fabric.IText('要因' + (i + 1), {
+          left: bx + 45, top: by, originX: 'left', originY: 'center',
+          fontSize: 13, fill: color, fontFamily: fontSelect.value
+        }));
+      }
+      finalizeGroupedInsert(objs);
+    }
+
+    // ⭕ ベン図：2つの円の重なりで、比較対象の共通点・相違点を整理する思考ツール。
+    function insertVennDiagram() {
+      const center = getCenterPosition();
+      const color = penColorInput.value;
+      const r = 90, offset = 55;
+      const objs = [];
+      objs.push(new fabric.Ellipse({
+        left: center.x - offset, top: center.y, rx: r, ry: r,
+        originX: 'center', originY: 'center', stroke: color, strokeWidth: 2, fill: 'transparent'
+      }));
+      objs.push(new fabric.Ellipse({
+        left: center.x + offset, top: center.y, rx: r, ry: r,
+        originX: 'center', originY: 'center', stroke: color, strokeWidth: 2, fill: 'transparent'
+      }));
+      objs.push(new fabric.IText('A', {
+        left: center.x - offset - r * 0.55, top: center.y, originX: 'center', originY: 'center',
+        fontSize: 14, fill: color, fontFamily: fontSelect.value
+      }));
+      objs.push(new fabric.IText('B', {
+        left: center.x + offset + r * 0.55, top: center.y, originX: 'center', originY: 'center',
+        fontSize: 14, fill: color, fontFamily: fontSelect.value
+      }));
+      objs.push(new fabric.IText('共通', {
+        left: center.x, top: center.y, originX: 'center', originY: 'center',
+        fontSize: 13, fill: color, fontFamily: fontSelect.value
+      }));
+      finalizeGroupedInsert(objs);
+    }
+
     function insertShapeAt(shapeType) {
       const center = getCenterPosition();
       const w = 120, h = 80;
@@ -5579,6 +6002,31 @@
       }
     });
 
+    // 📝 テキストの画面幅自動折り返し（再編集時の折り返し直し）
+    // 表のセル（tableId持ち）は列幅で自動的に折り返されるため対象外。
+    // 再編集を始めた瞬間ではなく、目標幅だけ控えておいて、実際に最初の
+    // 1文字が変更された瞬間（'text:changed'）に折り返しを反映する。
+    canvas.on('text:editing:entered', (opt) => {
+      const t = opt.target;
+      if (!t || t.tableId || t.type !== 'textbox') return;
+      const newWidth = computeWrapWidthForPosition(t.left || 0);
+      const oldWidth = t.width || 0;
+      t._pendingRewrapWidth = (Math.abs(newWidth - oldWidth) >= 4) ? newWidth : null;
+    });
+    canvas.on('text:changed', (opt) => {
+      const t = opt.target;
+      if (!t || t._pendingRewrapWidth == null) return;
+      const w = t._pendingRewrapWidth;
+      t._pendingRewrapWidth = null;
+      t.set('width', w);
+      if (t.initDimensions) t.initDimensions();
+      canvas.requestRenderAll();
+    });
+    canvas.on('text:editing:exited', (opt) => {
+      const t = opt.target;
+      if (t) t._pendingRewrapWidth = null;
+    });
+
     const insertTableBtn = document.getElementById('insert-table-btn');
     const insertTablePopup = document.getElementById('insert-table-popup');
     insertTableBtn.addEventListener('click', () => {
@@ -5665,10 +6113,10 @@
       const mask = new fabric.Rect({
         left, top, width, height,
         fill: penColorInput.value,
-        opacity: 0.93,
+        opacity: 1,
         isMemoryMask: true,
         isMaskRevealed: false,
-        maskFullOpacity: 0.93,
+        maskFullOpacity: 1,
         selectable: true, evented: true,
         hoverCursor: 'pointer'
       });
@@ -5718,7 +6166,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.170     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.172     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
