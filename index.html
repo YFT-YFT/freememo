@@ -27,82 +27,28 @@
 
   <!-- サービスワーカーの登録 -->
   <script>
-    // --- 強制キャッシュクリアの判定 ---
-    // 通常はオフラインでも使えるよう積極的にキャッシュを使うが、以下の場合だけは
-    // 「最新版が反映されない」ことを避けるため、キャッシュを破棄して最新を取得する。
-    //   ブラウザの更新ボタンを15秒以内に3回押した
-    // それ以外（うっかり1回更新した等）は、従来通りキャッシュから読み込み、
-    // 作業中の状態をなるべく保つ。
-    // ※ ここで扱うのはservice worker側のキャッシュ（アプリ本体のファイル）だけで、
-    //    ノート内容（localStorageの手書き・テキストデータ）には一切触れない。
-    //
-    // [重要な安全対策] 過去のバージョンで、環境（Edge / Vivaldi 等）やストレージの
-    // 挙動差により、強制リロードが連鎖的に発生し続ける「高速チラつき」の不具合が
-    // 発生した。これは、リロード直後の判定が再び「強制リロードすべき」と誤判定し、
-    // それ自体が新たなリロードとしてカウントされてしまう構造が根本原因だった。
-    // 対策として以下の2点を導入し、原因の詳細に関わらずループを構造的に防止する。
-    //   1. file:// で開いている場合はそもそもこの処理自体を実行しない
-    //      （ローカルファイルはService Worker登録自体ができないため、キャッシュを
-    //        気にする必要がなく、この機能は無関係）
-    //   2. 直近で強制リロードを行った場合は、一定時間（15秒）は再実行しない
-    //      「サーキットブレーカー」を設け、万一誤判定が起きても1回で止まるようにする
+    // --- 常に最新のHTMLを使う（更新ボタン1回でOK）／ノートのデータは消さない ---
+    // ・sw.js は「ネットワーク優先」なので、オンラインなら普通にページを更新するだけで最新版になる。
+    // ・以前の版で入っていた「キャッシュ優先」の古いService Workerが残っている場合に備え、
+    //   新しいService Workerに切り替わった瞬間に、1回だけ自動で再読み込みして最新版へ移行する。
+    // ・ここで扱うのはアプリ本体のキャッシュだけ。ノート内容（localStorageの手書き・ページ構成）には一切触れない。
+    // ・file:// で開いている場合はService Workerが使えないため何もしない（普通に更新すれば最新になる）。
     (function() {
-      // file:// で開いている場合はService Worker自体が使えないため、何もしない
       if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
-
-      const RELOAD_TRACK_KEY = 'penteki_reload_times';
-      const LAST_FORCE_CLEAR_KEY = 'penteki_last_force_clear_ts';
-      const FORCE_CLEAR_COOLDOWN_MS = 15000; // この時間内は再度の強制リロードを行わない
-      const now = Date.now();
-
-      function forceClearCacheAndReload(reason) {
-        // サーキットブレーカー：直近で強制リロード済みなら二度と実行しない
-        let lastForce = 0;
-        try { lastForce = parseInt(localStorage.getItem(LAST_FORCE_CLEAR_KEY) || '0', 10); } catch (e) {}
-        if (lastForce && (now - lastForce) < FORCE_CLEAR_COOLDOWN_MS) {
-          console.warn('[penteki] 直近で強制更新済みのため、ループ防止のためスキップします (reason=' + reason + ')');
-          return;
-        }
-        try { localStorage.setItem(LAST_FORCE_CLEAR_KEY, String(now)); } catch (e) {}
-        try { sessionStorage.removeItem(RELOAD_TRACK_KEY); } catch (e) {}
-
-        const tasks = [];
-        if ('serviceWorker' in navigator) {
-          tasks.push(navigator.serviceWorker.getRegistrations()
-            .then(regs => Promise.all(regs.map(r => r.unregister())))
-            .catch(() => {}));
-        }
-        if ('caches' in window) {
-          tasks.push(caches.keys()
-            .then(keys => Promise.all(keys.map(k => caches.delete(k))))
-            .catch(() => {}));
-        }
-        Promise.all(tasks).finally(() => {
-          // URLは変更しない（Service Worker登録解除とCache Storage削除が
-          // 既に完了しているため、通常のreloadで最新を取得できる）
-          location.reload();
-        });
-      }
-
-      try {
-        // 15秒以内に更新ボタンを3回押した場合
-        let times = JSON.parse(sessionStorage.getItem(RELOAD_TRACK_KEY) || '[]');
-        times = times.filter(t => now - t < 15000);
-        times.push(now);
-        if (times.length >= 3) {
-          forceClearCacheAndReload('3-reloads-in-15s');
-          return;
-        }
-        sessionStorage.setItem(RELOAD_TRACK_KEY, JSON.stringify(times));
-      } catch (e) { /* sessionStorageが使えない環境では何もしない */ }
-
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('sw.js')
-            .then(reg => console.log('SW registered!'))
-            .catch(err => console.log('SW registration failed:', err));
-        });
-      }
+      if (!('serviceWorker' in navigator)) return;
+      const hadController = !!navigator.serviceWorker.controller;
+      let reloadedForSw = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        // 初回インストール時（もともと制御されていなかった）は再読み込み不要
+        if (!hadController || reloadedForSw) return;
+        reloadedForSw = true;
+        location.reload();
+      });
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+          .then(reg => { try { reg.update(); } catch (e) {} })
+          .catch(err => console.log('SW registration failed:', err));
+      });
     })();
   </script>
 
@@ -3277,6 +3223,7 @@
       if (newIndex < 0 || newIndex >= pagesData.length) return;
       pendingConnectorSource = null;
       currentPageIndex = newIndex;
+      try { localStorage.setItem(STORAGE_KEY + '_page', String(newIndex)); } catch (e) {}
       updatePageUI();
 
       const pageJson = pagesData[currentPageIndex];
@@ -3961,6 +3908,9 @@
       }
     });
 
+    // 起動処理が終わるまでは、空のキャンバスで保存済みデータを上書きしないための目印
+    let restoreDone = false;
+    const PAGE_INDEX_KEY = STORAGE_KEY + '_page';
     function loadSavedData() {
       const savedData = localStorage.getItem(STORAGE_KEY);
       if (savedData) {
@@ -3969,8 +3919,30 @@
           if (!Array.isArray(pagesData) || pagesData.length === 0) pagesData = [null];
         } catch (e) { pagesData = [null]; }
       }
-      switchPage(0);
+      let startIndex = 0;
+      try {
+        const i = parseInt(localStorage.getItem(PAGE_INDEX_KEY), 10);
+        if (!isNaN(i) && i >= 0 && i < pagesData.length) startIndex = i; // 最後に開いていたページから再開
+      } catch (e) {}
+      switchPage(startIndex);
+      setTimeout(() => { restoreDone = true; }, 1500);
     }
+
+    // 意図的に閉じた場合・クラッシュ/強制終了・スマホでのアプリ切替（beforeunloadが
+    // 呼ばれない環境）でも直前の状態を失わないよう、画面が隠れる/閉じる瞬間に
+    // 現在のキャンバス内容をページデータへ反映して保存する。
+    function persistNowSafely() {
+      if (!restoreDone) return;
+      try {
+        pagesData[currentPageIndex] = JSON.stringify(canvas.toJSON(CANVAS_JSON_EXTRA_PROPS));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(pagesData));
+        localStorage.setItem(PAGE_INDEX_KEY, String(currentPageIndex));
+      } catch (e) { /* noop */ }
+    }
+    document.addEventListener('visibilitychange', () => { if (document.hidden) persistNowSafely(); });
+    window.addEventListener('pagehide', persistNowSafely);
+    // ブラウザによる保存データの自動削除（容量逼迫時など）を受けにくくするよう依頼する
+    if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(() => {}); }
 
     canvas.on('object:modified', saveState);
     // ============================================================
@@ -6230,7 +6202,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.176     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.177     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
