@@ -142,6 +142,26 @@
       overflow: hidden;
     }
 
+    @media (max-width: 600px) {
+      /* 画面の狭いiPhone等では、ツールバー内のボタン数が多く、
+         1つ1つの余白・文字サイズが大きいままだと目的のボタン
+         （図形・思考ツール・表なども含む）にたどり着くまでに
+         非常に長い距離を横スクロールする必要があった。
+         ここでは見た目の情報量はそのまま保ちつつ、余白・文字サイズだけを
+         詰めて、スクロール量を実用的な範囲まで減らす。
+         さらに、アイコン絵文字の後ろに付く文字ラベル（.btn-label）は
+         非表示にしてアイコンのみの表示にし、横幅を大きく圧縮する
+         （ラベルの内容は title 属性として長押しで確認できる）。 */
+      .tool-scroll-area { gap: 4px; }
+      .tool-group { gap: 3px; padding-right: 5px; }
+      #toolbar .tool-scroll-area button,
+      #toolbar .tool-scroll-area .file-label {
+        padding: 5px 6px;
+        font-size: 12px;
+      }
+      #toolbar .tool-scroll-area .btn-label { display: none; }
+    }
+
     /* 1列横スクロールエリア */
     .tool-scroll-area {
       display: flex;
@@ -471,6 +491,8 @@
     }
 
     .toggle-btn { background: #e9ecef; color: #333; border: 1px solid #ccc; }
+    .plain-btn { background: #e9ecef; color: #333; border: 1px solid #ccc; }
+    #toolbar .plain-btn:hover { background: #dde1e5; }
     .toggle-btn.active { background: #007bff; color: white; border-color: #0056b3; }
 
     /* 「挿入」ボタンはトグル（ON/OFF）ではない普通の操作ボタンだが、
@@ -596,8 +618,8 @@
       <!-- 1. 描画ツール（最も頻繁に使うため先頭に配置） -->
       <div class="tool-group">
         <button id="pen-mode-btn" class="toggle-btn active" title="標準ペン">✏️</button>
-        <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー">🖍️</button>
-        <button id="laser-mode-btn" class="toggle-btn" title="一時描画ペン（レーザーポインター風。描いた線が少し経つと自動的に消えます。画面共有や説明でここを指し示すのに便利です）">🔴 レーザー</button>
+        <button id="highlighter-mode-btn" class="toggle-btn" title="蛍光マーカー"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g transform="rotate(-35 12 12)"><rect x="9" y="2" width="6" height="12" rx="1" fill="#f4d03f" stroke="#1a1a1a" stroke-width="1"/><path d="M9 14h6l-1 4h-4z" fill="#333"/></g><rect x="3" y="20" width="18" height="3" rx="1" fill="#ffe94d" opacity="0.85"/></svg></button>
+        <button id="laser-mode-btn" class="toggle-btn" title="一時描画ペン（レーザーポインター風。描いた線が少し経つと自動的に消えます。画面共有や説明でここを指し示すのに便利です）">🔴 <span class="btn-label">レーザー</span></button>
         <button id="eraser-mode-btn" class="toggle-btn" title="消しゴム（タップ：要素ごと消す／長押し：なぞった部分だけ消す部分消しモードに切替）">
           <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <defs>
@@ -614,7 +636,7 @@
         </button>
         <button id="select-mode-btn" class="toggle-btn" title="選択（タップ：選択モードのON/OFF／長押し：自由に囲んで選ぶ「なげなわ選択」に切替）">👆 選択</button>
         <div class="tool-item" style="position:relative;">
-          <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップ、または1つ目を押したまま2つ目までドラッグして繋ぐと線で接続します。接続された要素は動かしても線が繋がったままになります。押すとON、もう一度押すとOFFになります）">🔗 コネクタ <span id="connector-type-indicator">―</span></button>
+          <button id="connector-btn" class="toggle-btn" title="コネクタ（2つの要素を順にタップ、または1つ目を押したまま2つ目までドラッグして繋ぐと線で接続します。接続された要素は動かしても線が繋がったままになります。押すとON、もう一度押すとOFFになります）">🔗 <span class="btn-label">コネクタ</span> <span id="connector-type-indicator">―</span></button>
           <div class="color-popup connector-type-popup" id="connector-type-popup">
             <div class="connector-type-options">
               <div class="connector-type-group-label">矢印</div>
@@ -638,7 +660,7 @@
             </div>
           </div>
         </div>
-        <button id="mask-mode-btn" class="toggle-btn" title="暗記マスク（赤シート風）：ドラッグした範囲を覆い隠します。選択モード中などにマスクをタップすると表示/非表示が切り替わります（暗記カード・穴埋めクイズに）">🟥 マスク</button>
+        <button id="mask-mode-btn" class="toggle-btn" title="暗記マスク（赤シート風）：ドラッグした範囲を覆い隠します。選択モード中などにマスクをタップすると表示/非表示が切り替わります（暗記カード・穴埋めクイズに）">🟥 <span class="btn-label">マスク</span></button>
       </div>
 
       <!-- 2. ペン設定（直前の描画ツールに直結する設定） -->
@@ -663,11 +685,11 @@
       <!-- 3. 挿入（画像/PDFなど、キャンバスに新しく何かを追加する操作をまとめる） -->
       <div class="tool-group">
         <label class="file-label" title="画像・PDFを挿入">
-          🖼️ 挿入
+          🖼️ <span class="btn-label">挿入</span>
           <input type="file" id="img-file-input" accept="image/*,application/pdf">
         </label>
         <div class="tool-item" style="position:relative;">
-          <button id="insert-shape-btn" title="図形を挿入（四角・丸・三角・ひし形・矢印など、考えを整理するのに使える簡易図形）">🔷 図形</button>
+          <button id="insert-shape-btn" class="plain-btn" title="図形を挿入（四角・丸・三角・ひし形・矢印など、考えを整理するのに使える簡易図形）">🔷 <span class="btn-label">図形</span></button>
           <div class="color-popup" id="insert-shape-popup">
             <div class="connector-type-row">
               <button type="button" class="shape-insert-option" data-shape="rect" title="四角形">▭</button>
@@ -679,8 +701,8 @@
           </div>
         </div>
         <div class="tool-item" style="position:relative;">
-          <button id="insert-thinking-tool-btn" title="思考ツールを挿入（クラゲチャート・Yチャート・フィッシュボーン図・ベン図など、考えを整理するテンプレート図）">🧠 思考ツール</button>
-          <div class="color-popup" id="insert-thinking-tool-popup">
+          <button id="insert-thinking-tool-btn" class="plain-btn" title="思考ツールを挿入（クラゲチャート・Yチャート・フィッシュボーン図・ベン図など、考えを整理するテンプレート図）">🧠 <span class="btn-label">思考ツール</span></button>
+          <div class="color-popup" id="insert-thinking-tool-popup" style="width:auto;">
             <div style="display:flex; flex-direction:column; gap:2px; padding:2px; min-width:160px;">
               <button type="button" class="thinking-tool-option" data-tool="jellyfish">🪼 クラゲチャート（理由づけ）</button>
               <button type="button" class="thinking-tool-option" data-tool="ychart">🔺 Yチャート（多面的に見る）</button>
@@ -690,8 +712,8 @@
           </div>
         </div>
         <div class="tool-item" style="position:relative;">
-          <button id="insert-table-btn" title="表（テーブル）を挿入">▦ 表</button>
-          <div class="color-popup" id="insert-table-popup">
+          <button id="insert-table-btn" class="plain-btn" title="表（テーブル）を挿入">▦ <span class="btn-label">表</span></button>
+          <div class="color-popup" id="insert-table-popup" style="width:auto;">
             <div style="display:flex; flex-direction:column; gap:8px; padding:6px; min-width:140px;">
               <label style="font-size:12px; display:flex; justify-content:space-between; align-items:center;">行数
                 <input type="number" id="table-rows-input" min="1" max="20" value="3" style="width:56px;">
@@ -780,7 +802,7 @@
             <option value="letter-landscape">レター 横</option>
           </select>
         </div>
-        <button id="touch-pan-lock-btn" class="toggle-btn" title="画面スクロール固定">✋ 移動固定</button>
+        <button id="touch-pan-lock-btn" class="toggle-btn" title="画面スクロール固定">✋ <span class="btn-label">移動固定</span></button>
       </div>
 
       <!-- 6. ページ管理 -->
@@ -797,19 +819,19 @@
 
       <!-- 7. データ入出力（全ページのデータをファイルとして保存・読み込み） -->
       <div class="tool-group">
-        <button id="export-json-btn" title="全ページのデータを1つのファイルに保存します（他の端末やあとで読み込み直せます）">📤 データ書出</button>
-        <label class="file-label" title="書き出したデータファイルを読み込みます（現在の内容は上書きされます）">
-          📥 データ読込
+        <button id="export-json-btn" class="plain-btn" title="全ページのデータを1つのファイルに保存します（他の端末やあとで読み込み直せます）">📤 <span class="btn-label">データ書出</span></button>
+        <label class="file-label plain-btn" title="書き出したデータファイルを読み込みます（現在の内容は上書きされます）">
+          📥 <span class="btn-label">データ読込</span>
           <input type="file" id="import-json-input" accept="application/json,.json">
         </label>
       </div>
 
       <!-- 8. 出力・消去（頻度が低く、消去は誤操作防止のため他から離して末尾に配置） -->
       <div class="tool-group">
-        <button id="export-btn" title="全描画をPNG画像保存">💾 PNG</button>
-        <button id="export-pdf-btn" class="pdf-btn" title="全描画をPDF出力">📄 PDF</button>
-        <button id="clear-btn" class="clear-btn" title="このページの描画内容だけを消去します">🗑️ このページを消去</button>
-        <button id="clear-all-btn" class="clear-btn" title="すべてのページの描画内容を消去します（元に戻せません）">⚠️ 全ページ消去</button>
+        <button id="export-btn" title="全描画をPNG画像保存">💾 <span class="btn-label">PNG</span></button>
+        <button id="export-pdf-btn" class="pdf-btn" title="全描画をPDF出力">📄 <span class="btn-label">PDF</span></button>
+        <button id="clear-btn" class="clear-btn" title="このページの描画内容だけを消去します">🗑️ <span class="btn-label">このページを消去</span></button>
+        <button id="clear-all-btn" class="clear-btn" title="すべてのページの描画内容を消去します（元に戻せません）">⚠️ <span class="btn-label">全ページ消去</span></button>
       </div>
     </div>
   </div>
@@ -1567,7 +1589,7 @@
         (isTextLikeObject(target) && clickCount >= 2)
       );
 
-      canvas.isDrawingMode = !willSelect && (currentDrawMode === 'pen' || currentDrawMode === 'highlighter');
+      canvas.isDrawingMode = !willSelect && (currentDrawMode === 'pen' || currentDrawMode === 'highlighter' || currentDrawMode === 'laser');
     }
 
     const upperCanvasEl = canvas.upperCanvasEl;
@@ -3011,8 +3033,15 @@
     // 操作できる状態のときだけ「選択中」の色にする。選択モード・画面移動固定中は
     // 描画はできない状態なので、紛らわしくないようどのツールボタンも光らせない
     // （選択中であることは selectModeBtn / touchPanLockBtn 側の色で示す）。
+    function isSelectingNow() {
+      return isSelectMode ||
+        currentDrawMode === 'lasso' ||
+        isCtrlKeyPhysicallyHeld ||
+        (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'eyedropper' && currentDrawMode !== 'mask');
+    }
     function refreshToolButtonHighlights() {
-      const suppressed = isSelectMode || isPanLockMode;
+      // 長押し・ダブルタップ・Ctrl等で選択状態になっている間も、ツールボタンは光らせず選択ボタンだけ青にする
+      const suppressed = isSelectingNow() || isPanLockMode;
       penModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'pen');
       highlighterModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'highlighter');
       laserModeBtn.classList.toggle('active', !suppressed && currentDrawMode === 'laser');
@@ -3138,11 +3167,9 @@
     // ダブルタップ/長押しでオブジェクトを選択できている間も、
     // 同じボタンを光らせて「今は選択できる状態です」とわかりやすくする。
     function updateSelectModeIndicator() {
-      const isActivelySelecting = isSelectMode ||
-        currentDrawMode === 'lasso' ||
-        isCtrlKeyPhysicallyHeld ||
-        (!!canvas.getActiveObject() && !isPanLockMode && currentDrawMode !== 'eraser' && currentDrawMode !== 'connector' && currentDrawMode !== 'lasso' && currentDrawMode !== 'eyedropper' && currentDrawMode !== 'mask');
+      const isActivelySelecting = isSelectingNow();
       selectModeBtn.classList.toggle('active', isActivelySelecting);
+      refreshToolButtonHighlights();
     }
 
     // 選択モード中に「何もない場所」をダブルタップ/ダブルクリックしたときは、
@@ -5628,10 +5655,41 @@
     });
 
     // ============================================================
+    // 📏 ツールバー（横スクロール部分）のスクロール位置を記憶する
+    // 画面の狭いiPhone等では「🔷 図形」「🧠 思考ツール」「▦ 表」のような
+    // 後ろの方にあるボタンにたどり着くまで毎回長く横スクロールする必要があり、
+    // 使いにくかったため、一度スクロールした位置を覚えておき、次回開いた
+    // ときも同じ位置から始められるようにする（端末・ページ単位ではなく、
+    // このアプリ全体で1つの位置を共有する）。
+    // ============================================================
+    const toolScrollArea = document.querySelector('.tool-scroll-area');
+    const TOOLBAR_SCROLL_KEY = 'pentaki_toolbar_scroll_left';
+    if (toolScrollArea) {
+      try {
+        const savedScroll = parseInt(localStorage.getItem(TOOLBAR_SCROLL_KEY), 10);
+        if (!isNaN(savedScroll) && savedScroll > 0) {
+          // 初回描画直後だとスクロール可能な幅がまだ確定していないことがあるため、
+          // 少し遅らせてから復元する。
+          requestAnimationFrame(() => { toolScrollArea.scrollLeft = savedScroll; });
+        }
+      } catch (e) { /* 無視 */ }
+      let toolScrollSaveTimer = null;
+      toolScrollArea.addEventListener('scroll', () => {
+        if (toolScrollSaveTimer) clearTimeout(toolScrollSaveTimer);
+        toolScrollSaveTimer = setTimeout(() => {
+          try { localStorage.setItem(TOOLBAR_SCROLL_KEY, String(toolScrollArea.scrollLeft)); } catch (e) { /* 無視 */ }
+        }, 300);
+      });
+    }
+
+    // ============================================================
     // 🔷 図形の直接挿入（考えを整理するための簡易図形）
     // ============================================================
     const insertShapeBtn = document.getElementById('insert-shape-btn');
     const insertShapePopup = document.getElementById('insert-shape-popup');
+    // #toolbar の overflow:hidden + backdrop-filter でクリップされて見えなくなる（＝タップしても
+    // 何も起きないように見える）のを避けるため、他のポップアップ同様 body 直下へ付け替える。
+    document.body.appendChild(insertShapePopup);
     insertShapeBtn.addEventListener('click', () => {
       openFloatingPopup(insertShapePopup, insertShapeBtn);
     });
@@ -5650,6 +5708,9 @@
     // ============================================================
     const insertThinkingToolBtn = document.getElementById('insert-thinking-tool-btn');
     const insertThinkingToolPopup = document.getElementById('insert-thinking-tool-popup');
+    // #toolbar の overflow:hidden + backdrop-filter でクリップされて見えなくなる（＝タップしても
+    // 何も起きないように見える）のを避けるため、他のポップアップ同様 body 直下へ付け替える。
+    document.body.appendChild(insertThinkingToolPopup);
     insertThinkingToolBtn.addEventListener('click', () => {
       openFloatingPopup(insertThinkingToolPopup, insertThinkingToolBtn);
     });
@@ -6029,6 +6090,9 @@
 
     const insertTableBtn = document.getElementById('insert-table-btn');
     const insertTablePopup = document.getElementById('insert-table-popup');
+    // #toolbar の overflow:hidden + backdrop-filter でクリップされて見えなくなる（＝タップしても
+    // 何も起きないように見える）のを避けるため、他のポップアップ同様 body 直下へ付け替える。
+    document.body.appendChild(insertTablePopup);
     insertTableBtn.addEventListener('click', () => {
       openFloatingPopup(insertTablePopup, insertTableBtn);
     });
@@ -6166,7 +6230,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.172     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.176     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
