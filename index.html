@@ -31,7 +31,7 @@
     // ・sw.js は「ネットワーク優先」なので、オンラインなら普通にページを更新するだけで最新版になる。
     // ・以前の版で入っていた「キャッシュ優先」の古いService Workerが残っている場合に備え、
     //   新しいService Workerに切り替わった瞬間に、1回だけ自動で再読み込みして最新版へ移行する。
-    // ・ここで扱うのはアプリ本体のキャッシュだけ。ノート内容（localStorageの手書き・ページ構成）には一切触れない。
+    // ・ここで扱うのはアプリ本体のキャッシュだけ。ノート内容（IndexedDB／localStorageの手書き・ページ構成）には一切触れない。
     // ・file:// で開いている場合はService Workerが使えないため何もしない（普通に更新すれば最新になる）。
     (function() {
       if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
@@ -925,7 +925,7 @@
         <h4>📑 ページ管理 & 自動保存</h4>
         <ul>
           <li><b>複数ページ</b>: 上部メニューの「＋」で新規ページを追加し、「⧉」で今のページをそのまま複製し、「◀」「▶」で自由に切り替えができます。</li>
-          <li><b>安心の自動保存</b>: 書いた内容や作成したページはブラウザ内に自動的に保存されます。ページを閉じたり再読み込みしても続きから作業できます。</li>
+          <li><b>安心の自動保存</b>: 書いた内容や作成したページはブラウザ内（大容量のIndexedDB）に自動的に保存されます。ページを閉じたり再読み込みしても続きから作業できます。右上の「保存済み」表示をタップすると、保存領域の使用量の目安を確認できます。</li>
         </ul>
       </div>
 
@@ -3223,7 +3223,7 @@
       if (newIndex < 0 || newIndex >= pagesData.length) return;
       pendingConnectorSource = null;
       currentPageIndex = newIndex;
-      try { localStorage.setItem(STORAGE_KEY + '_page', String(newIndex)); } catch (e) {}
+      if (storageReady) autoSaveLocal(); // 開いているページ番号も保存しておく
       updatePageUI();
 
       const pageJson = pagesData[currentPageIndex];
@@ -3876,57 +3876,167 @@
       updateGroupButtonState();
     }
 
+    // ============================================================
+    // 💾 保存（IndexedDB を本体、localStorage を予備／緊急用として併用）
+    // ・localStorage は約5MBまでしか入らないため、画像やPDFを取り込むと保存エラーになっていた。
+    //   本体の保存先を、容量がはるかに大きい IndexedDB に切り替えた。
+    // ・以前の版（localStorageのみ）のデータは、初回起動時に自動で引き継ぐ。
+    //   localStorage 側のデータは削除せず残す（予備・元のバージョンに戻したい場合の保険）。
+    // ・保存のたびに更新時刻(ts)を持たせ、IndexedDB と localStorage のうち
+    //   新しい方を起動時に採用する（IndexedDBが一時的に使えなかった場合の取りこぼし防止）。
+    // ・ページを閉じる／アプリ切替の瞬間は非同期のIndexedDB書き込みが間に合わない
+    //   場合があるため、同時に localStorage へも同期的に書いておく（容量超過時は無視）。
+    // ============================================================
+    const IDB_NAME = 'penteki_db';
+    const IDB_STORE = 'kv';
+    const IDB_KEY = 'notebook';
+    const PAGE_INDEX_KEY = STORAGE_KEY + '_page';
+    const TS_KEY = STORAGE_KEY + '_ts';
+    let idbPromise = null;
+    let idbDisabled = false; // 起動時に使えないと判明した場合は、その回は localStorage のみで動かす
+    let storageReady = false; // 保存データの読み込みが終わるまで、空の状態で上書き保存しないための目印
+    let restoreDone = false;
+
+    function openIdb() {
+      if (idbPromise) return idbPromise;
+      idbPromise = new Promise((resolve, reject) => {
+        if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+        let req;
+        try { req = indexedDB.open(IDB_NAME, 1); } catch (e) { reject(e); return; }
+        req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+        req.onsuccess = () => {
+          const db = req.result;
+          db.onversionchange = () => { db.close(); idbPromise = null; };
+          db.onclose = () => { idbPromise = null; };
+          resolve(db);
+        };
+        req.onerror = () => reject(req.error || new Error('IndexedDB open error'));
+        req.onblocked = () => reject(new Error('IndexedDB blocked'));
+      });
+      idbPromise.catch(() => { idbPromise = null; });
+      return idbPromise;
+    }
+    function idbGet(key) {
+      return openIdb().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const r = tx.objectStore(IDB_STORE).get(key);
+        r.onsuccess = () => resolve(r.result === undefined ? null : r.result);
+        r.onerror = () => reject(r.error);
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB read aborted'));
+      }));
+    }
+    function idbPut(key, value) {
+      return openIdb().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(value, key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error || new Error('IndexedDB write error'));
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB write aborted'));
+      }));
+    }
+    function withTimeout(promise, ms) {
+      return new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('timeout')), ms);
+        promise.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+      });
+    }
+
+    function buildSnapshot() {
+      return { pages: pagesData.slice(), index: currentPageIndex, ts: Date.now() };
+    }
+    // localStorage への同期書き込み（緊急用／IndexedDBが使えない場合の保存先）。容量超過なら false。
+    function writeSnapshotToLocalStorage(snap) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snap.pages));
+        localStorage.setItem(PAGE_INDEX_KEY, String(snap.index));
+        localStorage.setItem(TS_KEY, String(snap.ts));
+        return true;
+      } catch (e) { return false; }
+    }
+    // 戻り値: 'idb'（本体に保存）／'ls'（予備の localStorage に保存）／false（どちらにも保存できず）
+    async function saveNotebookNow() {
+      const snap = buildSnapshot();
+      if (!idbDisabled) {
+        try {
+          await idbPut(IDB_KEY, snap);
+          return 'idb';
+        } catch (e) { console.warn('IndexedDB保存失敗。localStorageで代替します:', e); }
+      }
+      return writeSnapshotToLocalStorage(snap) ? 'ls' : false;
+    }
+
     let saveTimeout = null;
     let quotaWarned = false;
+    let saveRunning = false;
+    let saveAgain = false;
+    async function runSave() {
+      if (saveRunning) { saveAgain = true; return; }
+      saveRunning = true;
+      const statusEl = document.getElementById('save-status');
+      let result = false;
+      try {
+        do { saveAgain = false; result = await saveNotebookNow(); } while (saveAgain);
+      } finally { saveRunning = false; }
+      if (result) {
+        statusEl.textContent = '✅ 保存済み';
+        quotaWarned = false;
+        updateStorageUsageInfo();
+      } else {
+        statusEl.textContent = '⚠️ 保存エラー';
+        // 容量超過などで自動保存が失敗した場合、気づかず作業を続けて
+        // データを失うことを防ぐため、初回のみ明示的に警告する。
+        if (!quotaWarned) {
+          quotaWarned = true;
+          alert('自動保存に失敗しました。ブラウザの保存容量の上限に達しているか、この閲覧モード（プライベートモード等）では保存できない可能性があります。\n念のため「📤 データ書出」または「💾 PNG」「📄 PDF」で書き出して保存することをおすすめします。');
+        }
+      }
+    }
     function autoSaveLocal() {
+      if (!storageReady) return; // 読み込み前に空の状態で上書きしない
       const statusEl = document.getElementById('save-status');
       statusEl.textContent = '💾 保存中...';
       if (saveTimeout) clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(() => {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(pagesData));
-          statusEl.textContent = '✅ 保存済み';
-          quotaWarned = false;
-        } catch (e) {
-          statusEl.textContent = '⚠️ 保存エラー';
-          // 容量超過などで自動保存が失敗した場合、気づかず作業を続けて
-          // データを失うことを防ぐため、初回のみ明示的に警告する。
-          if (!quotaWarned) {
-            quotaWarned = true;
-            alert('自動保存に失敗しました。画像やPDFの取り込み量が多く、ブラウザの保存容量上限に達している可能性があります。\n念のため「💾 PNG」または「📄 PDF」で書き出して保存することをおすすめします。');
-          }
+      saveTimeout = setTimeout(() => { saveTimeout = null; runSave(); }, 300);
+    }
+
+    // 保存領域の使用量／上限の目安を、保存状態バッジの説明とタップ時のメッセージに反映する。
+    // 上限の80%を超えたら、保存できなくなる前に気づけるよう警告を出す
+    // （「⚠️ 保存エラー」は実際に保存が失敗してから出るため、それより手前で知らせる）。
+    const STORAGE_WARN_RATIO = 0.9;
+    let storageInfoText = '';
+    let storageWarnedThisSession = false; // 同じセッション中に何度も出て邪魔にならないよう、1回だけ出す
+    function updateStorageUsageInfo() {
+      if (!(navigator.storage && navigator.storage.estimate)) return;
+      navigator.storage.estimate().then(est => {
+        if (!est || !est.quota) return;
+        const mb = n => (n / 1048576).toFixed(1);
+        const ratio = est.quota > 0 ? (est.usage || 0) / est.quota : 0;
+        storageInfoText = `保存領域の使用量: 約 ${mb(est.usage || 0)} MB / 上限の目安: 約 ${mb(est.quota)} MB（${(ratio * 100).toFixed(0)}%）`;
+        const el = document.getElementById('save-status');
+        if (el) el.title = storageInfoText;
+        if (ratio >= STORAGE_WARN_RATIO && !storageWarnedThisSession) {
+          storageWarnedThisSession = true;
+          alert(
+            `保存領域の使用量が上限の目安の${(ratio * 100).toFixed(0)}%に達しています。\n` +
+            storageInfoText + '\n\n' +
+            'このまま使い続けると、保存できなくなるおそれがあります。\n' +
+            '必要なページは「📤 データ書出」で書き出してバックアップを取ったうえで、\n' +
+            '「⚠️ 全ページ消去」ボタンで不要なページ（特に画像やPDFを含むページ）を削除することをおすすめします。'
+          );
+        } else if (ratio < STORAGE_WARN_RATIO) {
+          storageWarnedThisSession = false; // 削除等で余裕ができた場合は、再び閾値を超えたときにまた警告できるようにする
         }
-      }, 300);
+      }).catch(() => {});
     }
-
-    // タブを閉じる／リロードする直前に、保留中の自動保存があれば即座に反映する。
-    // デバウンス(300ms)の間にページが閉じられると直前の変更が保存されないバグがあったため。
-    window.addEventListener('beforeunload', () => {
-      if (saveTimeout) {
-        clearTimeout(saveTimeout);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pagesData)); } catch (e) { /* noop */ }
-      }
-    });
-
-    // 起動処理が終わるまでは、空のキャンバスで保存済みデータを上書きしないための目印
-    let restoreDone = false;
-    const PAGE_INDEX_KEY = STORAGE_KEY + '_page';
-    function loadSavedData() {
-      const savedData = localStorage.getItem(STORAGE_KEY);
-      if (savedData) {
-        try {
-          pagesData = JSON.parse(savedData);
-          if (!Array.isArray(pagesData) || pagesData.length === 0) pagesData = [null];
-        } catch (e) { pagesData = [null]; }
-      }
-      let startIndex = 0;
-      try {
-        const i = parseInt(localStorage.getItem(PAGE_INDEX_KEY), 10);
-        if (!isNaN(i) && i >= 0 && i < pagesData.length) startIndex = i; // 最後に開いていたページから再開
-      } catch (e) {}
-      switchPage(startIndex);
-      setTimeout(() => { restoreDone = true; }, 1500);
-    }
+    (function() {
+      const el = document.getElementById('save-status');
+      if (!el) return;
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => {
+        alert((storageInfoText || '保存領域の使用量を取得できませんでした。') +
+          '\n\n※ 目安の値です。ブラウザやOSにより実際に使える量は異なります。');
+      });
+    })();
 
     // 意図的に閉じた場合・クラッシュ/強制終了・スマホでのアプリ切替（beforeunloadが
     // 呼ばれない環境）でも直前の状態を失わないよう、画面が隠れる/閉じる瞬間に
@@ -3935,14 +4045,72 @@
       if (!restoreDone) return;
       try {
         pagesData[currentPageIndex] = JSON.stringify(canvas.toJSON(CANVAS_JSON_EXTRA_PROPS));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(pagesData));
-        localStorage.setItem(PAGE_INDEX_KEY, String(currentPageIndex));
       } catch (e) { /* noop */ }
+      if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
+      const snap = buildSnapshot();
+      writeSnapshotToLocalStorage(snap);                     // 同期・緊急用（容量超過なら無視）
+      if (!idbDisabled) { idbPut(IDB_KEY, snap).catch(() => {}); } // 本体（間に合えば最新化）
     }
+    // タブを閉じる／リロードする直前に、保留中の自動保存があれば即座に反映する。
+    window.addEventListener('beforeunload', persistNowSafely);
     document.addEventListener('visibilitychange', () => { if (document.hidden) persistNowSafely(); });
     window.addEventListener('pagehide', persistNowSafely);
     // ブラウザによる保存データの自動削除（容量逼迫時など）を受けにくくするよう依頼する
     if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(() => {}); }
+
+    async function loadSavedData() {
+      // 1) IndexedDB（本体）
+      let idbRec = null;
+      try {
+        idbRec = await withTimeout(idbGet(IDB_KEY), 4000);
+        if (idbRec && !Array.isArray(idbRec.pages)) idbRec = null;
+      } catch (e) {
+        idbDisabled = true; // この回は IndexedDB を使わず localStorage だけで動かす
+        console.warn('IndexedDBを使用できません。localStorageで動作します:', e);
+      }
+      // 2) localStorage（旧版のデータ／緊急保存／代替保存）
+      let lsRec = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr) && arr.length > 0) {
+            lsRec = {
+              pages: arr,
+              index: parseInt(localStorage.getItem(PAGE_INDEX_KEY), 10),
+              ts: parseInt(localStorage.getItem(TS_KEY), 10) || 0 // 旧版のデータは時刻なし＝最も古い扱い
+            };
+          }
+        }
+      } catch (e) { lsRec = null; }
+      // 3) 新しい方を採用（同時刻や、IndexedDBが新しければ IndexedDB を優先）
+      let chosen = null;
+      if (idbRec && lsRec) chosen = (lsRec.ts > (idbRec.ts || 0)) ? lsRec : idbRec;
+      else chosen = idbRec || lsRec;
+
+      if (chosen && Array.isArray(chosen.pages) && chosen.pages.length > 0) {
+        pagesData = chosen.pages.slice();
+      } else {
+        pagesData = [null];
+      }
+      let startIndex = (chosen && !isNaN(chosen.index)) ? chosen.index : 0;
+      if (!(startIndex >= 0 && startIndex < pagesData.length)) startIndex = 0; // 最後に開いていたページから再開
+      storageReady = true;
+      switchPage(startIndex);
+      setTimeout(() => { restoreDone = true; }, 1500);
+      updateStorageUsageInfo();
+
+      // 4) 旧版(localStorageのみ)や緊急保存から復元した場合は、IndexedDBへ引っ越して読み戻しで確認する
+      if (chosen && chosen === lsRec && !idbDisabled) {
+        try {
+          await idbPut(IDB_KEY, { pages: pagesData.slice(), index: startIndex, ts: Math.max(Date.now(), lsRec.ts || 0) });
+          const back = await idbGet(IDB_KEY);
+          if (!back || !Array.isArray(back.pages) || back.pages.length !== pagesData.length) {
+            console.warn('IndexedDBへの移行の確認に失敗しました（localStorageのデータは残っています）');
+          }
+        } catch (e) { console.warn('IndexedDBへの移行に失敗しました（localStorageのデータは残っています）:', e); }
+      }
+    }
 
     canvas.on('object:modified', saveState);
     // ============================================================
@@ -6202,7 +6370,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.177     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.180     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
