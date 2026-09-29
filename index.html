@@ -3892,6 +3892,8 @@
     const IDB_KEY = 'notebook';
     const PAGE_INDEX_KEY = STORAGE_KEY + '_page';
     const TS_KEY = STORAGE_KEY + '_ts';
+    const LAST_OPEN_KEY = STORAGE_KEY + '_lastopen';
+    const STALE_DAYS = 31; // これだけの日数、一度も開かれなかった場合に確認ダイアログを出す
     let idbPromise = null;
     let idbDisabled = false; // 起動時に使えないと判明した場合は、その回は localStorage のみで動かす
     let storageReady = false; // 保存データの読み込みが終わるまで、空の状態で上書き保存しないための目印
@@ -4109,6 +4111,65 @@
             console.warn('IndexedDBへの移行の確認に失敗しました（localStorageのデータは残っています）');
           }
         } catch (e) { console.warn('IndexedDBへの移行に失敗しました（localStorageのデータは残っています）:', e); }
+      }
+
+      checkStaleDataAndMaybeOfferClear();
+    }
+
+    // ============================================================
+    // 🗓️ 長期間未使用データの確認削除
+    // 「使わなくなったら、ストレージを圧迫したまま残り続ける」問題への対策。
+    // ・自動では絶対に削除しない（誤って大事なノートを失う事故を防ぐため）。
+    // ・前回開いてからSTALE_DAYS日以上経っていた場合だけ、確認ダイアログを出し、
+    //   OKを押したときだけ削除する（＝既存の「全ページ消去」と同じ処理を呼ぶ）。
+    // ・キャンセルした場合は何もしない（今回は消さず、次回また同じ確認が出る）。
+    // ・「最後に開いた日時」はページの内容とは無関係に、常にlocalStorageへ
+    //   同期的に記録する（IndexedDBが使えない環境でもこの判定自体は機能させるため）。
+    // ============================================================
+    function checkStaleDataAndMaybeOfferClear() {
+      let lastOpen = 0;
+      try { lastOpen = parseInt(localStorage.getItem(LAST_OPEN_KEY), 10) || 0; } catch (e) {}
+      const now = Date.now();
+      try { localStorage.setItem(LAST_OPEN_KEY, String(now)); } catch (e) {}
+
+      const pageHasContent = (pageJson) => {
+        if (!pageJson) return false;
+        try {
+          const obj = JSON.parse(pageJson);
+          return Array.isArray(obj.objects) && obj.objects.length > 0;
+        } catch (e) { return true; } // 壊れたJSON等、判定できない場合は安全側で「内容あり」扱いにする
+      };
+      const hasAnyContent = pagesData.some(pageHasContent); // 空ページだけなら、そもそも消すものが無い
+      if (!hasAnyContent || !lastOpen) return; // 初回起動時（記録が無い）は対象外
+      const daysSince = (now - lastOpen) / (1000 * 60 * 60 * 24);
+      if (daysSince < STALE_DAYS) return;
+
+      const showConfirmAndMaybeClear = (usageText) => {
+        const days = Math.floor(daysSince);
+        const msg =
+          `このペンテキを${days}日間開いていませんでした。\n` +
+          (usageText ? usageText + '\n\n' : '\n') +
+          '保存されたままのノートが、端末の保存領域を圧迫している可能性があります。\n\n' +
+          '今すぐ全ページを削除して、保存領域を空けますか？\n' +
+          '（削除する場合は、先に「📤 データ書出」で書き出してバックアップを取ることをおすすめします）\n\n' +
+          '「キャンセル」を選んだ場合、今回は何も削除されません。';
+        if (confirm(msg)) {
+          if (confirm('最終確認：本当にすべてのページを削除しますか？この操作は元に戻せません。')) {
+            clearAllPagesData();
+          }
+        }
+      };
+
+      if (navigator.storage && navigator.storage.estimate) {
+        navigator.storage.estimate().then(est => {
+          const mb = n => (n / 1048576).toFixed(1);
+          const usageText = (est && est.quota)
+            ? `現在の保存領域の使用量は約 ${mb(est.usage || 0)} MB です。`
+            : '';
+          showConfirmAndMaybeClear(usageText);
+        }).catch(() => showConfirmAndMaybeClear(''));
+      } else {
+        showConfirmAndMaybeClear('');
       }
     }
 
@@ -5075,9 +5136,7 @@
       }
     });
 
-    document.getElementById('clear-all-btn').addEventListener('click', () => {
-      if (!confirm('すべてのページの描画内容を消去します。この操作は元に戻せません。本当によろしいですか？')) return;
-      if (!confirm('最終確認：本当にすべてのページを消去しますか？')) return;
+    function clearAllPagesData() {
       pendingConnectorSource = null;
       pagesData = [null];
       currentPageIndex = 0;
@@ -5087,6 +5146,12 @@
       updateCanvasBackground(bgStyleSelect.value);
       updatePageUI();
       saveState();
+    }
+
+    document.getElementById('clear-all-btn').addEventListener('click', () => {
+      if (!confirm('すべてのページの描画内容を消去します。この操作は元に戻せません。本当によろしいですか？')) return;
+      if (!confirm('最終確認：本当にすべてのページを消去しますか？')) return;
+      clearAllPagesData();
     });
 
     // ============================================================
@@ -6370,7 +6435,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.180     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.182     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
