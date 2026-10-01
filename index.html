@@ -3680,19 +3680,7 @@
     deleteSelectedBtn.addEventListener('click', deleteSelectedObjects);
     duplicateSelectedBtn.addEventListener('click', duplicateSelectedObjects);
     attachTapHold(alignLeftBtn, { onTap: alignSelectedObjectsLeft, onHold: stackSelectedObjectsVertically });
-    ocrBtn.addEventListener('click', () => {
-      // 選択中の手書きがあり、まだ自動OCRモードでない場合は、
-      // 従来通りその場で1回だけ文字認識する（後方互換）。
-      // それ以外（選択が無い、またはすでに自動モード中）は、
-      // 「描画するたびに自動でOCRする」モードのON/OFF切り替えとして扱う。
-      const active = canvas.getActiveObject();
-      const hasSelection = !!(active && !isGuideObject(active));
-      if (!ocrAutoMode && hasSelection) {
-        recognizeSelectedHandwriting();
-      } else {
-        setOcrAutoMode(!ocrAutoMode);
-      }
-    });
+    ocrBtn.addEventListener('click', recognizeSelectedHandwriting);
     attachTapHold(eraserModeBtn, { onTap: eraserModeTap, onHold: eraserModeHold });
 
     // --- グループ化 ---
@@ -3870,9 +3858,7 @@
       const hasSelection = !!(activeObjects && activeObjects.length > 0);
       deleteSelectedBtn.disabled = !hasSelection;
       duplicateSelectedBtn.disabled = !hasSelection;
-      // OCRボタンは「選択中の手書きを認識する」だけでなく「自動OCRモードの
-      // ON/OFF切り替え」も兼ねるようになったため、選択が無くても常に押せる
-      // ようにする（自動モードは描画前にONにしておく必要があるため）。
+      ocrBtn.disabled = !hasSelection;
       updateGroupButtonState();
     }
 
@@ -4419,6 +4405,25 @@
 
     // 認識結果に基づき、元の手書きパスをきれいな図形オブジェクトに置き換える。
     // 色・太さ・不透明度は元のパスから引き継ぐ。
+    // 手書きで直線・矢印を描いて終点を保持したとき、両端がすでにある図形の
+    // 上に乗っていれば、ただの直線ではなく「🔗 コネクタ」と全く同じ仕組みで
+    // スマートコネクタ（図形の外周同士をつなぐ線）に変換する。
+    // 新しい当たり判定ロジックを作らず、長押し選択のフォールバック判定
+    // （findLongPressTarget）と同じ「絶対座標のバウンディングボックス内か」で
+    // 判定することで、挙動の一貫性を保っている。
+    function findShapeAtPoint(pt, excludeObj) {
+      const objs = canvas.getObjects();
+      for (let i = objs.length - 1; i >= 0; i--) {
+        const o = objs[i];
+        if (o === excludeObj || isGuideObject(o) || o.isConnectorLine || o.labelForLineId) continue;
+        const b = o.getBoundingRect(true, true);
+        if (pt.x >= b.left && pt.x <= b.left + b.width && pt.y >= b.top && pt.y <= b.top + b.height) {
+          return o;
+        }
+      }
+      return null;
+    }
+
     function convertPathToShapeIfRecognized(fabricPath, timingVertices) {
       const recog = recognizeShapeFromPath(fabricPath, timingVertices);
       if (!recog) return false;
@@ -4440,7 +4445,19 @@
 
       if (recog.type === 'line') {
         const p1 = recog.points[0], p2 = recog.points[1];
-        shapeObj = new fabric.Line([offsetX + p1.x, offsetY + p1.y, offsetX + p2.x, offsetY + p2.y], commonProps);
+        const abs1 = { x: offsetX + p1.x, y: offsetY + p1.y };
+        const abs2 = { x: offsetX + p2.x, y: offsetY + p2.y };
+        const shapeA = findShapeAtPoint(abs1, fabricPath);
+        const shapeB = findShapeAtPoint(abs2, fabricPath);
+        if (shapeA && shapeB && shapeA !== shapeB) {
+          // 両端がそれぞれ別の図形の上にある → 普通の直線にはせず、
+          // 🔗コネクタモードのタップ操作と全く同じ createConnectorLine() を呼ぶ
+          // （コネクタの見た目・スタイル・保存処理を一切重複させない）。
+          canvas.remove(fabricPath);
+          createConnectorLine(shapeA, shapeB); // 内部でsaveState()まで行う
+          return true;
+        }
+        shapeObj = new fabric.Line([abs1.x, abs1.y, abs2.x, abs2.y], commonProps);
       } else if (recog.type === 'ellipse') {
         const b = recog.bbox;
         shapeObj = new fabric.Ellipse({
@@ -5431,49 +5448,6 @@
     // ============================================================
     const OCR_API_KEY = 'helloworld';
 
-    // 🔤 自動OCRモード：OCRボタンを先にONにしておくと、以後は手書きを
-    // 選択してボタンを押さなくても、1画（ストローク）を描き終えて
-    // 0.5秒ほど間があいたタイミングで自動的にOCRが走る。連続して素早く
-    // 書いた複数画（例：漢字の複数ストローク）はまとめて1回のOCR対象にする
-    // ため、新しい画が増えるたびにタイマーを延長している。
-    let ocrAutoMode = false;
-    let ocrAutoTimer = null;
-    let ocrAutoPendingPaths = [];
-    const OCR_AUTO_DELAY_MS = 500;
-
-    function setOcrAutoMode(on) {
-      ocrAutoMode = on;
-      ocrBtn.classList.toggle('active', ocrAutoMode);
-      if (!ocrAutoMode) {
-        if (ocrAutoTimer) { clearTimeout(ocrAutoTimer); ocrAutoTimer = null; }
-        ocrAutoPendingPaths = [];
-      }
-    }
-
-    canvas.on('path:created', function(opt) {
-      if (!ocrAutoMode) return;
-      const path = opt.path;
-      if (!path || path.isMemoryMask) return;
-      ocrAutoPendingPaths.push(path);
-      if (ocrAutoTimer) clearTimeout(ocrAutoTimer);
-      ocrAutoTimer = setTimeout(runAutoOcr, OCR_AUTO_DELAY_MS);
-    });
-
-    function runAutoOcr() {
-      ocrAutoTimer = null;
-      const targets = ocrAutoPendingPaths.filter(p => canvas.getObjects().indexOf(p) !== -1);
-      ocrAutoPendingPaths = [];
-      if (targets.length === 0 || !ocrAutoMode) return;
-      canvas.discardActiveObject();
-      if (targets.length === 1) {
-        canvas.setActiveObject(targets[0]);
-      } else {
-        canvas.setActiveObject(new fabric.ActiveSelection(targets, { canvas: canvas }));
-      }
-      canvas.requestRenderAll();
-      recognizeSelectedHandwriting(true); // silent=true：自動モード中は失敗のたびにアラートを出さない
-    }
-
     function updateOcrAvailability() {
       if (!navigator.onLine) {
         ocrBtn.title = '文字認識（インターネット接続が必要です・現在オフラインのため使えません）';
@@ -6435,7 +6409,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.182     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.183     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
