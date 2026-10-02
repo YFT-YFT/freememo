@@ -916,7 +916,7 @@
       <div class="modal-section">
         <h4>📁 ファイルの読み込みと出力保存</h4>
         <ul>
-          <li><b>読み込み（🖼️ 挿入）</b>: お手持ちの画像（PNG/JPEG）や<b>PDFファイル</b>を取り込んで、その上に手書きやメモを重ねることができます。複数ページのPDFは、全ページを縦につなげて1つのグループとして、今のキャンバスに挿入されます。横幅は「用紙」設定の横幅（例：A4なら210mm分）にぴったり揃います（用紙が「なし」のときはA4の横幅）。</li>
+          <li><b>読み込み（🖼️ 挿入）</b>: お手持ちの画像（PNG/JPEG）や<b>PDFファイル</b>を取り込んで、その上に手書きやメモを重ねることができます。複数ページのPDFは、全ページを縦につなげて1つのグループとして、今のキャンバスに挿入されます。横幅は「用紙」設定の横幅の95%（例：A4なら約200mm分）に揃い、用紙マスの左右中央に置かれます（用紙が「なし」のときはA4の横幅の95%）。</li>
           <li><b>書き出し（💾 PNG / 📄 PDF）</b>: キャンバスに書いたすべての内容（手書き・文字・画像・背景の罫線）を網羅して、1枚の画像（PNG）またはPDFとして保存できます。「用紙」でB5／A4／B4／A3のいずれかを選んだ状態でPDF書き出しすると、「用紙サイズごとにページを分けるか」を確認するダイアログが出ます。分割を選ぶと、実際に描かれているマスだけが、それぞれ実寸サイズのPDFページとして書き出されます。PDFは印刷品質（300dpi相当）を保ちながらファイルサイズを抑えるため、ページ画像をJPEG圧縮しています（💾 PNGは劣化のない可逆圧縮のままです）。</li>
           <li><b>📤 データ書出 / 📥 データ読込</b>: 全ページの内容を1つのファイル(.json)にまとめて保存・復元できます。他の端末に移したり、バックアップとして保管したりするのに使えます（PNG/PDFと違い、あとで再編集できる形式です）。</li>
         </ul>
@@ -3613,7 +3613,7 @@
     }
 
     // PDFを挿入する：全ページを縦に隙間なくつなげ、1つのグループ（共通groupId）として
-    // 今のページ(キャンバス)に置く。横幅は現在の用紙設定の横幅ぴったりに揃える
+    // 今のページ(キャンバス)に置く。横幅は現在の用紙設定の横幅の95%に揃える
     // （例：A4なら210mm分）。用紙が「なし」のときはA4縦の横幅を基準にする。
     // 位置は、用紙グリッドの区切りに合わせて置く（用紙ごとのマス目にぴったり収まる）。
     async function loadPDFToCanvas(arrayBuffer) {
@@ -3623,7 +3623,8 @@
 
         const paperKey = paperSizeSelect ? paperSizeSelect.value : '';
         const paper = getPaperSizePx(paperKey);
-        const targetW = paper ? paper.w : PAPER_SIZES_MM.a4.w * PX_PER_MM;
+        const PDF_WIDTH_RATIO = 0.95; // 用紙の横幅に対する割合（ぴったりだと窮屈なので95%）
+        const targetW = (paper ? paper.w : PAPER_SIZES_MM.a4.w * PX_PER_MM) * PDF_WIDTH_RATIO;
 
         // 1) 全ページを画像化（横幅=targetWの2倍の解像度で描画して、拡大しても読めるように）
         const pageImages = []; // { dataUrl, w, h } ← w,hはキャンバス上の大きさ
@@ -3657,7 +3658,8 @@
           // 画面の中央にあるマスの左端／画面上端に一番近いマスの上端に合わせる。
           const col = Math.floor((center.x + paper.w / 2) / paper.w);
           const row = Math.round((viewTop + paper.h / 2) / paper.h);
-          left = -paper.w / 2 + col * paper.w;
+          // 用紙マスの中で左右中央に置く（95%幅なので両側に2.5%ずつ余白ができる）
+          left = -paper.w / 2 + col * paper.w + (paper.w - targetW) / 2;
           top = -paper.h / 2 + row * paper.h;
         } else {
           left = center.x - targetW / 2;
