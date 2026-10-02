@@ -874,7 +874,7 @@
         <ul>
           <li><b>🔷 図形</b>: メニューの「🔷 図形」から、四角形・円/楕円・三角形・ひし形・矢印を選ぶと、その図形が画面中央に挿入されます。考えを整理する図（フローチャートなど）を作るときに、手書きよりきれいに素早く配置できます。</li>
           <li><b>🧠 思考ツール</b>: メニューの「🧠 思考ツール」から、クラゲチャート（理由づけ）・Yチャート（多面的に見る）・フィッシュボーン図（原因分析）・ベン図（比較・共通点）といった定番のテンプレート図をまとめて配置できます。配置後は1つのまとまりとして扱われる（どれか1つをタップすると全体が選択される）ので、そのまま移動もできますし、✂️ボタンでグループ解除してパーツごとに自由に編集することもできます。各ラベルの文字はダブルタップして書き換えられます。</li>
-          <li><b>▦ 表（テーブル）</b>: メニューの「▦ 表」から行数・列数を指定して挿入します。各セルは文字を入力すると自動で折り返され（改行され）、文字が増えてセルの高さが足りなくなると、その行の高さが自動的に広がります。</li>
+          <li><b>▦ 表（テーブル）</b>: メニューの「▦ 表」から行数・列数を指定して挿入します。入力は、セルの中ならどこをダブルタップ（ダブルクリック）してもできます。文字を入力するとセルの幅で自動的に折り返され、文字が増えて高さが足りなくなると、その行の高さが自動的に広がります。<br>セルを1つ選ぶ（長押し、または選択モードでタップ。挿入直後は左上のセルが選択済み）と、表の上側に「↔」、左側に「↕」、左上に「✥」のつまみが表示されます。<b>↔をドラッグ</b>すると列の幅、<b>↕をドラッグ</b>すると行の高さ、<b>✥をドラッグ</b>すると表全体を移動できます（選択中のセルをドラッグしても、表ごと動きます）。文字量で広がった行は、文字を消すと元の高さに戻ります。</li>
         </ul>
       </div>
 
@@ -1504,6 +1504,7 @@
     let isErasingDrag = false; // 消しゴムでなぞって連続的に消している最中かどうか
     let startX, startY;
     let clickCount = 0, clickTimer = null, lastTarget = null;
+    let lastTapClientPt = null;
 
     // --- Ctrlキーの「物理的な押下状態」をクリックとは独立して追跡する ---
     // ChromeOSなど一部のOS/トラックパッドドライバは「Ctrl+トラックパッドクリック」を
@@ -1562,7 +1563,14 @@
       let target = null;
       try { target = canvas.findTarget(e, false); } catch (err) { target = null; }
 
-      if (lastTarget === target) clickCount++;
+      // 表のセルは範囲が広いため、手書きで同じセル内に素早く続けて書いた2画目を
+      // 「ダブルタップ」と誤認しないよう、前回のタップ位置と近い場合だけ連打とみなす。
+      const tapPt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      const tapNow = { x: tapPt.clientX, y: tapPt.clientY };
+      const farFromLastTap = !!(target && target.tableId && lastTapClientPt &&
+        Math.hypot(tapNow.x - lastTapClientPt.x, tapNow.y - lastTapClientPt.y) > 24);
+      lastTapClientPt = tapNow;
+      if (lastTarget === target && !farFromLastTap) clickCount++;
       else { clickCount = 1; lastTarget = target; }
       clearTimeout(clickTimer);
       clickTimer = setTimeout(() => { clickCount = 0; lastTarget = null; }, 400);
@@ -2379,6 +2387,7 @@
       canvas.getObjects().forEach(o => {
         if (o === target || isGuideObject(o) || o.isConnectorLine || o.arrowOwnerId || o.labelForLineId) return;
         if (o.groupId && target.groupId && o.groupId === target.groupId) return;
+        if (o.tableId && target.tableId && o.tableId === target.tableId) return; // 同じ表の仲間は一緒に動くので吸着対象外
         const ob = o.getBoundingRect(true, true);
         snapCandidateCache.push({
           left: ob.left, right: ob.left + ob.width, centerX: ob.left + ob.width / 2,
@@ -3183,7 +3192,8 @@
       'connRouteType', '_lineId', 'labelForLineId', 'connSeq',
       'groupId',
       'isMemoryMask', 'isMaskRevealed', 'maskFullOpacity',
-      'tableId', 'isTableGrid', '_tableOriginLeft', '_tableOriginTop', 'tableRow', 'tableCol'
+      'tableId', 'isTableGrid', '_tableOriginLeft', '_tableOriginTop', 'tableRow', 'tableCol',
+      'tableColWidths', 'tableRowHeights', 'tableEffColWidths', 'tableEffRowHeights'
     ];
 
     // ============================================================
@@ -6245,6 +6255,21 @@
       return 'tbl_' + Date.now().toString(36) + '_' + tableIdSeq;
     }
 
+    // ------------------------------------------------------------
+    // 表のレイアウトの考え方
+    // ・表 = 「セル(Textbox)の集まり」+「罫線(Path)」。罫線オブジェクトが表全体の
+    //   設定（左上の位置・列幅・行の高さ）を持つ。
+    //   - tableColWidths / tableRowHeights : 利用者が決めた列幅・行の高さ（最小値）
+    //   - tableEffColWidths / tableEffRowHeights : 文字量に応じて広がった後の実際の値
+    // ・セルの幅は列幅から決まり、文字が増えれば行の高さだけが自動で広がる。
+    // ・どれか1つのセルを動かすと、表全体（他のセル＋罫線）が一緒に動く。
+    // ------------------------------------------------------------
+    const TABLE_CELL_PAD = 6;
+    const TABLE_DEFAULT_COL_W = 100;
+    const TABLE_DEFAULT_ROW_H = 34;
+    const TABLE_MIN_COL_W = 40;
+    const TABLE_MIN_ROW_H = 24;
+
     function buildTableGridPathString(originLeft, originTop, colWidths, rowHeights) {
       const totalW = colWidths.reduce((a, b) => a + b, 0);
       const totalH = rowHeights.reduce((a, b) => a + b, 0);
@@ -6262,12 +6287,17 @@
       return d.trim();
     }
 
-    function buildTableGridObject(tableId, originLeft, originTop, colWidths, rowHeights) {
+    // colWidths/rowHeights = 実際の寸法、userCols/userRows = 利用者が決めた最小値
+    function buildTableGridObject(tableId, originLeft, originTop, colWidths, rowHeights, userCols, userRows) {
       const d = buildTableGridPathString(originLeft, originTop, colWidths, rowHeights);
       const grid = new fabric.Path(d, {
         stroke: '#888888', strokeWidth: 1, fill: '',
         selectable: false, evented: false,
         isTableGrid: true, tableId,
+        tableColWidths: (userCols || colWidths).slice(),
+        tableRowHeights: (userRows || rowHeights).slice(),
+        tableEffColWidths: colWidths.slice(),
+        tableEffRowHeights: rowHeights.slice(),
         objectCaching: false
       });
       grid._tableOriginLeft = originLeft;
@@ -6275,33 +6305,48 @@
       return grid;
     }
 
+    function findTableGrid(tableId) {
+      return canvas.getObjects().find(o => o.tableId === tableId && o.isTableGrid);
+    }
+
+    // セルは、サイズ変更用の拡大縮小ハンドルを出さない（幅・高さは列幅/行の高さで決まるため）
+    const TABLE_CELL_LOCK_PROPS = { hasControls: false, lockScalingX: true, lockScalingY: true, lockRotation: true };
+
+    // 保存データから復元したセルにも同じ設定を当てる
+    (function patchTableCellFromObject() {
+      const origTextboxFromObject = fabric.Textbox.fromObject;
+      fabric.Textbox.fromObject = function(object, callback) {
+        let obj = object;
+        if (obj && obj.tableId) obj = Object.assign({}, obj, TABLE_CELL_LOCK_PROPS);
+        return origTextboxFromObject.call(this, obj, callback);
+      };
+    })();
+
     function insertTableAt(rows, cols) {
       rows = Math.max(1, Math.min(20, rows || 3));
       cols = Math.max(1, Math.min(10, cols || 3));
       const center = getCenterPosition();
-      const defaultColWidth = 100;
-      const defaultRowHeight = 34;
-      const totalW = defaultColWidth * cols;
-      const totalH = defaultRowHeight * rows;
+      const totalW = TABLE_DEFAULT_COL_W * cols;
+      const totalH = TABLE_DEFAULT_ROW_H * rows;
       const originLeft = center.x - totalW / 2;
       const originTop = center.y - totalH / 2;
-      const cellPad = 6;
+      const cellPad = TABLE_CELL_PAD;
 
       const tableId = generateTableId();
-      const colWidths = new Array(cols).fill(defaultColWidth);
-      const rowHeights = new Array(rows).fill(defaultRowHeight);
+      const colWidths = new Array(cols).fill(TABLE_DEFAULT_COL_W);
+      const rowHeights = new Array(rows).fill(TABLE_DEFAULT_ROW_H);
 
       let y = originTop;
       for (let r = 0; r < rows; r++) {
         let x = originLeft;
         for (let c = 0; c < cols; c++) {
-          const tb = new fabric.Textbox('', {
+          const tb = new fabric.Textbox('', Object.assign({
             left: x + cellPad, top: y + cellPad,
             width: colWidths[c] - cellPad * 2,
             fontSize: 14, fill: textColorInput.value, fontFamily: fontSelect.value,
             splitByGrapheme: true, // 日本語など単語区切りの無い文でも折り返せるように
             tableId, tableRow: r, tableCol: c
-          });
+          }, TABLE_CELL_LOCK_PROPS));
           canvas.add(tb);
           x += colWidths[c];
         }
@@ -6314,6 +6359,10 @@
       if (originMark) canvas.moveTo(gridObj, canvas.getObjects().indexOf(originMark) + 1);
       else canvas.sendToBack(gridObj);
 
+      // 挿入直後は左上のセルを選択し、列幅・行の高さ・移動のつまみがすぐ見えるようにする
+      const firstCell = canvas.getObjects().find(o => o.tableId === tableId && o.tableRow === 0 && o.tableCol === 0 && o.type === 'textbox');
+      if (firstCell) { canvas.discardActiveObject(); canvas.setActiveObject(firstCell); }
+
       canvas.requestRenderAll();
       saveState();
     }
@@ -6324,23 +6373,54 @@
       tableReflowTimers[tableId] = setTimeout(() => reflowTable(tableId), 400);
     }
 
-    function reflowTable(tableId) {
+    // 表全体を並べ直す（列幅→セル幅→文字の折り返し→行の高さ→セルの位置→罫線の作り直し）
+    // opts.skipSave: true なら履歴(保存)には残さない（ドラッグ中の途中経過用）
+    function reflowTable(tableId, opts) {
+      opts = opts || {};
       const cells = canvas.getObjects().filter(o => o.tableId === tableId && o.type === 'textbox');
-      const gridObj = canvas.getObjects().find(o => o.tableId === tableId && o.isTableGrid);
-      if (cells.length === 0 || !gridObj) return;
+      const gridObj = findTableGrid(tableId);
+      if (cells.length === 0 || !gridObj) return null;
       const originLeft = gridObj._tableOriginLeft, originTop = gridObj._tableOriginTop;
-      if (originLeft === undefined || originTop === undefined) return;
+      if (originLeft === undefined || originTop === undefined) return null;
 
       const rows = Math.max.apply(null, cells.map(c => c.tableRow)) + 1;
       const cols = Math.max.apply(null, cells.map(c => c.tableCol)) + 1;
-      const cellPad = 6;
+      const pad = TABLE_CELL_PAD;
 
-      const colWidths = new Array(cols).fill(100);
-      cells.forEach(c => { colWidths[c.tableCol] = Math.max(colWidths[c.tableCol], c.width + cellPad * 2); });
-      const rowHeights = new Array(rows).fill(34);
-      cells.forEach(c => {
-        const needed = c.height + cellPad * 2;
-        if (needed > rowHeights[c.tableRow]) rowHeights[c.tableRow] = needed;
+      // 利用者が決めた列幅・行の高さ。古い保存データ（未設定）は、今のセル幅から割り出す。
+      const savedCols = Array.isArray(gridObj.tableColWidths) ? gridObj.tableColWidths : null;
+      const savedRows = Array.isArray(gridObj.tableRowHeights) ? gridObj.tableRowHeights : null;
+      const userCols = [];
+      for (let c = 0; c < cols; c++) {
+        let w;
+        if (savedCols && typeof savedCols[c] === 'number') w = savedCols[c];
+        else {
+          w = TABLE_DEFAULT_COL_W;
+          cells.forEach(cell => { if (cell.tableCol === c) w = Math.max(w, cell.width + pad * 2); });
+        }
+        userCols.push(Math.max(TABLE_MIN_COL_W, w));
+      }
+      const userRows = [];
+      for (let r = 0; r < rows; r++) {
+        const h = (savedRows && typeof savedRows[r] === 'number') ? savedRows[r] : TABLE_DEFAULT_ROW_H;
+        userRows.push(Math.max(TABLE_MIN_ROW_H, h));
+      }
+
+      // セルの幅を列幅に合わせる（文字の折り返しもここで更新される）
+      const colWidths = userCols.slice();
+      cells.forEach(cell => {
+        const w = colWidths[cell.tableCol] - pad * 2;
+        if (Math.abs(cell.width - w) > 0.5) {
+          cell.set('width', w);
+          if (cell.initDimensions) cell.initDimensions();
+        }
+        // 1文字がセルより幅広い等でセルが自分で広がった場合は、列のほうを広げて合わせる
+        colWidths[cell.tableCol] = Math.max(colWidths[cell.tableCol], cell.width + pad * 2);
+      });
+      const rowHeights = userRows.slice();
+      cells.forEach(cell => {
+        const needed = cell.height + pad * 2;
+        if (needed > rowHeights[cell.tableRow]) rowHeights[cell.tableRow] = needed;
       });
 
       let y = originTop;
@@ -6349,7 +6429,7 @@
         for (let c = 0; c < cols; c++) {
           const cell = cells.find(o => o.tableRow === r && o.tableCol === c);
           if (cell) {
-            cell.set({ left: x + cellPad, top: y + cellPad });
+            cell.set({ left: x + pad, top: y + pad });
             cell.setCoords();
           }
           x += colWidths[c];
@@ -6358,14 +6438,15 @@
       }
 
       canvas.remove(gridObj);
-      const newGrid = buildTableGridObject(tableId, originLeft, originTop, colWidths, rowHeights);
+      const newGrid = buildTableGridObject(tableId, originLeft, originTop, colWidths, rowHeights, userCols, userRows);
       canvas.add(newGrid);
       const originMark = canvas.getObjects().find(o => o.isOriginMark);
       if (originMark) canvas.moveTo(newGrid, canvas.getObjects().indexOf(originMark) + 1);
       else canvas.sendToBack(newGrid);
 
       canvas.requestRenderAll();
-      saveState();
+      if (!opts.skipSave) saveState();
+      return { colWidths, rowHeights, originLeft, originTop };
     }
 
     // Textboxの内容が変わるたび（文字入力の途中）は少し待ってからまとめて
@@ -6381,6 +6462,232 @@
         reflowTable(t.tableId);
       }
     });
+
+    // ------------------------------------------------------------
+    // 表ごとの移動
+    // どれか1つのセルをドラッグ（または複数のセルをまとめて選んでドラッグ）すると、
+    // 選ばれていない残りのセルと罫線も同じ量だけ一緒に動かす。
+    // ------------------------------------------------------------
+    function translateTableObjects(tableId, dx, dy, skipSet) {
+      canvas.getObjects().forEach(o => {
+        if (o.tableId !== tableId || (skipSet && skipSet.has(o))) return;
+        o.set({ left: o.left + dx, top: o.top + dy });
+        o.setCoords();
+        if (o.isTableGrid) {
+          o._tableOriginLeft += dx;
+          o._tableOriginTop += dy;
+        } else {
+          try { updateConnectorLinesFor(o); } catch (err) { /* 接続線の追従に失敗しても移動自体は続ける */ }
+        }
+      });
+    }
+
+    canvas.on('object:moving', function(opt) {
+      const t = opt.target, tr = opt.transform;
+      if (!t || !tr || !tr.original) return;
+      const members = t._objects ? t._objects : [t];
+      const ids = new Set();
+      members.forEach(o => { if (o.tableId) ids.add(o.tableId); });
+      if (ids.size === 0) return;
+      // ドラッグ開始からの総移動量との差分だけを、残りのメンバーへ反映する
+      const totalX = t.left - tr.original.left;
+      const totalY = t.top - tr.original.top;
+      const applied = tr._tblApplied || (tr._tblApplied = { x: 0, y: 0 });
+      const dx = totalX - applied.x, dy = totalY - applied.y;
+      if (!dx && !dy) return;
+      const selected = new Set(members);
+      ids.forEach(id => translateTableObjects(id, dx, dy, selected));
+      applied.x = totalX; applied.y = totalY;
+      canvas.requestRenderAll();
+    });
+
+    // ------------------------------------------------------------
+    // セルのどこをタップしても「そのセル」として扱う
+    // セルの文字枠は小さい（左上寄りの約88×16px）ため、枠の外の余白をダブルタップすると
+    // 表とは無関係な新しい文字ができてしまっていた。ペン/マーカー/レーザーの
+    // 通常操作では、セルの範囲内ならどこでもそのセルを対象として返すようにする。
+    // （ただし、その位置により上に重なっている手書き線などがあれば、そちらを優先する）
+    // ------------------------------------------------------------
+    function findTableCellAtScenePoint(p) {
+      const objs = canvas.getObjects();
+      for (let i = objs.length - 1; i >= 0; i--) {
+        const g = objs[i];
+        if (!g.isTableGrid || !g.tableEffColWidths || !g.tableEffRowHeights) continue;
+        const ox = g._tableOriginLeft, oy = g._tableOriginTop;
+        if (ox === undefined || oy === undefined) continue;
+        let x = p.x - ox, y = p.y - oy;
+        if (x < 0 || y < 0) continue;
+        let col = -1, row = -1;
+        for (let c = 0, acc = 0; c < g.tableEffColWidths.length; c++) { acc += g.tableEffColWidths[c]; if (x < acc) { col = c; break; } }
+        for (let r = 0, acc = 0; r < g.tableEffRowHeights.length; r++) { acc += g.tableEffRowHeights[r]; if (y < acc) { row = r; break; } }
+        if (col < 0 || row < 0) continue;
+        const cell = objs.find(o => o.tableId === g.tableId && o.type === 'textbox' && o.tableRow === row && o.tableCol === col);
+        if (cell) return cell;
+      }
+      return null;
+    }
+
+    (function installTableCellHitFallback() {
+      const origFindTarget = canvas.findTarget.bind(canvas);
+      canvas.findTarget = function(e, skipGroup) {
+        const target = origFindTarget(e, skipGroup);
+        if (currentDrawMode !== 'pen' && currentDrawMode !== 'highlighter' && currentDrawMode !== 'laser') return target;
+        if (target && target._objects) return target; // 複数選択(ActiveSelection)はそのまま
+        try {
+          const cell = findTableCellAtScenePoint(canvas.getPointer(e));
+          if (!cell || target === cell) return target;
+          if (!target) return cell;
+          const objs = canvas.getObjects();
+          // 表のセルより下にあるもの（背景の画像など）は、セルを優先する
+          return objs.indexOf(target) < objs.indexOf(cell) ? cell : target;
+        } catch (err) {
+          return target;
+        }
+      };
+    })();
+
+    // ------------------------------------------------------------
+    // 列幅・行の高さ・移動のつまみ（画面に重ねるボタン）
+    // セルを1つ選択している間だけ、表の上側に「↔」（列幅）、左側に「↕」（行の高さ）、
+    // 左上に「✥」（表ごと移動）が出る。ドラッグで操作する。
+    // キャンバスの外（DOM）に置いているので、ペンの描画や選択操作とは干渉しない。
+    // ------------------------------------------------------------
+    (function setupTableHandles() {
+      const style = document.createElement('style');
+      style.textContent = `
+        #table-handle-layer { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 6; pointer-events: none; }
+        .tbl-handle { position: fixed; left: 0; top: 0; display: flex; align-items: center; justify-content: center;
+          background: rgba(33,150,243,0.92); color: #fff; font-weight: 700; border-radius: 999px; line-height: 1;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.35); pointer-events: auto; touch-action: none;
+          user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+        .tbl-handle-col { width: 34px; height: 22px; font-size: 14px; cursor: col-resize; }
+        .tbl-handle-row { width: 22px; height: 34px; font-size: 14px; cursor: row-resize; }
+        .tbl-handle-grip { width: 30px; height: 30px; font-size: 17px; cursor: move; background: rgba(255,152,0,0.95); }
+      `;
+      document.head.appendChild(style);
+      const layer = document.createElement('div');
+      layer.id = 'table-handle-layer';
+      document.body.appendChild(layer);
+
+      let state = { tableId: null, sig: '', grip: null, cols: [], rows: [] };
+      let drag = null;
+      const upgrading = new Set();
+
+      function clearHandles() {
+        layer.innerHTML = '';
+        state = { tableId: null, sig: '', grip: null, cols: [], rows: [] };
+      }
+      function activeTableId() {
+        const a = canvas.getActiveObject();
+        return (a && a.tableId && !a._objects && a.type === 'textbox') ? a.tableId : null;
+      }
+      function makeEl(kind, label, onDown) {
+        const el = document.createElement('div');
+        el.className = 'tbl-handle tbl-handle-' + kind;
+        el.textContent = label;
+        el.addEventListener('pointerdown', onDown);
+        el.addEventListener('pointermove', onMove);
+        el.addEventListener('pointerup', onUp);
+        el.addEventListener('pointercancel', onUp);
+        layer.appendChild(el);
+        return el;
+      }
+      function rebuild(tableId, nCols, nRows) {
+        layer.innerHTML = '';
+        state = { tableId, sig: tableId + ':' + nCols + 'x' + nRows, grip: null, cols: [], rows: [] };
+        state.grip = makeEl('grip', '✥', (e) => startDrag(e, 'move', 0));
+        for (let c = 0; c < nCols; c++) state.cols.push(makeEl('col', '↔', (e) => startDrag(e, 'col', c)));
+        for (let r = 0; r < nRows; r++) state.rows.push(makeEl('row', '↕', (e) => startDrag(e, 'row', r)));
+      }
+      // つまみの大きさ（CSSと同じ値）。描画のたびにレイアウトを読み直さないよう固定値で計算する
+      const HANDLE_SIZE = { grip: [30, 30], col: [34, 22], row: [22, 34] };
+      function place(el, kind, cx, cy) {
+        const sz = HANDLE_SIZE[kind];
+        el.style.transform = 'translate(' + Math.round(cx - sz[0] / 2) + 'px,' + Math.round(cy - sz[1] / 2) + 'px)';
+      }
+
+      function update() {
+        let tid = activeTableId();
+        if (!tid && drag) tid = drag.tableId;
+        if (!tid) { if (state.tableId) clearHandles(); return; }
+        const grid = findTableGrid(tid);
+        if (!grid) { if (state.tableId) clearHandles(); return; }
+        if (!grid.tableEffColWidths || !grid.tableEffRowHeights) {
+          // 古い保存データの表：一度だけ並べ直して、列幅・行の高さの情報を作る
+          if (!upgrading.has(tid)) {
+            upgrading.add(tid);
+            setTimeout(() => { reflowTable(tid, { skipSave: true }); upgrading.delete(tid); }, 0);
+          }
+          return;
+        }
+        const cols = grid.tableEffColWidths, rows = grid.tableEffRowHeights;
+        if (state.sig !== tid + ':' + cols.length + 'x' + rows.length) rebuild(tid, cols.length, rows.length);
+
+        const z = canvas.getZoom(), vpt = canvas.viewportTransform;
+        const rect = canvas.upperCanvasEl.getBoundingClientRect();
+        const sx = (x) => rect.left + vpt[4] + x * z;
+        const sy = (y) => rect.top + vpt[5] + y * z;
+        const ox = grid._tableOriginLeft, oy = grid._tableOriginTop;
+
+        place(state.grip, 'grip', sx(ox) - 24, sy(oy) - 24);
+        let acc = 0;
+        for (let c = 0; c < cols.length; c++) { acc += cols[c]; place(state.cols[c], 'col', sx(ox + acc), sy(oy) - 18); }
+        acc = 0;
+        for (let r = 0; r < rows.length; r++) { acc += rows[r]; place(state.rows[r], 'row', sx(ox) - 18, sy(oy + acc)); }
+      }
+      canvas.on('after:render', update);
+
+      function startDrag(e, kind, index) {
+        e.preventDefault(); e.stopPropagation();
+        const tid = state.tableId;
+        if (!tid) return;
+        // 入力中なら一旦確定させて、並べ直し・保存を済ませてから操作を始める
+        const a = canvas.getActiveObject();
+        if (a && a.isEditing) a.exitEditing();
+        if (kind !== 'move') reflowTable(tid, { skipSave: true }); // 古い表も含め、設定値を確実に揃えておく
+        const grid = findTableGrid(tid);
+        if (!grid) return;
+        drag = {
+          tableId: tid, kind, index, pointerId: e.pointerId,
+          startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY, moved: false,
+          startW: grid.tableEffColWidths ? grid.tableEffColWidths[index] : TABLE_DEFAULT_COL_W,
+          startH: grid.tableEffRowHeights ? grid.tableEffRowHeights[index] : TABLE_DEFAULT_ROW_H
+        };
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* 無視 */ }
+      }
+      function onMove(e) {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        e.preventDefault();
+        const z = canvas.getZoom() || 1;
+        if (Math.abs(e.clientX - drag.startX) + Math.abs(e.clientY - drag.startY) > 2) drag.moved = true;
+        if (drag.kind === 'move') {
+          const dx = (e.clientX - drag.lastX) / z, dy = (e.clientY - drag.lastY) / z;
+          drag.lastX = e.clientX; drag.lastY = e.clientY;
+          if (dx || dy) { translateTableObjects(drag.tableId, dx, dy, null); canvas.requestRenderAll(); }
+          return;
+        }
+        const grid = findTableGrid(drag.tableId);
+        if (!grid) return;
+        if (drag.kind === 'col') {
+          const arr = (grid.tableColWidths || []).slice();
+          arr[drag.index] = Math.max(TABLE_MIN_COL_W, drag.startW + (e.clientX - drag.startX) / z);
+          grid.tableColWidths = arr;
+        } else {
+          const arr = (grid.tableRowHeights || []).slice();
+          arr[drag.index] = Math.max(TABLE_MIN_ROW_H, drag.startH + (e.clientY - drag.startY) / z);
+          grid.tableRowHeights = arr;
+        }
+        reflowTable(drag.tableId, { skipSave: true });
+      }
+      function onUp(e) {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        const d = drag;
+        drag = null;
+        try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) { /* 無視 */ }
+        if (d.moved) saveState();
+        canvas.requestRenderAll();
+      }
+    })();
 
     // 📝 テキストの画面幅自動折り返し（再編集時の折り返し直し）
     // 表のセル（tableId持ち）は列幅で自動的に折り返されるため対象外。
@@ -6555,7 +6862,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.185     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.186     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
