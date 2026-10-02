@@ -882,7 +882,7 @@
         <h4>🎯 提示・暗記モード</h4>
         <ul>
           <li><b>🔴 一時描画ペン（レーザーポインター風）</b>: 「🔴 レーザー」を選んで描くと、赤い線でその場を指し示せます。描いた線は1〜2秒ほどでじわっと自動的に消え、履歴にも残りません。画面共有や対面での説明で、ノートを汚さず「ここ注目！」と示すのに便利です。</li>
-          <li><b>🟥 暗記マスク（赤シート風）</b>: 「🟥 マスク」をONにして、隠したい範囲をドラッグすると、その部分を覆う四角ができます。選択モードなどでマスクを直接タップすると、表示（覆う）⇔非表示（覆いを外す）が瞬時に切り替わります。資格試験の暗記シートや、授業・プレゼンでの穴埋めクイズ形式の進行に使えます。タップでの切り替えはその場限りの一時的な操作として扱われ、ページを離れて戻ると再び隠れた状態に戻ります。</li>
+          <li><b>🟥 暗記マスク（赤シート風）</b>: 「🟥 マスク」をONにして、隠したい範囲をドラッグすると、その部分を覆う四角ができます。選択モードなどでマスクを直接タップすると、表示（覆う）⇔非表示（覆いを外す）が瞬時に切り替わります。資格試験の暗記シートや、授業・プレゼンでの穴埋めクイズ形式の進行に使えます。タップでの切り替えはその場限りの一時的な操作として扱われ、保存・書き出し・データ読込・「元に戻す」をしても、マスク自体は消えずに残ります（外した状態は保存されません）。また、ページを離れて戻ると再び隠れた状態に戻ります。</li>
         </ul>
       </div>
 
@@ -3182,8 +3182,54 @@
       'connId', 'isConnectorLine', 'connFromId', 'connToId', 'arrowType',
       'connRouteType', '_lineId', 'labelForLineId', 'connSeq',
       'groupId',
+      'isMemoryMask', 'isMaskRevealed', 'maskFullOpacity',
       'tableId', 'isTableGrid', '_tableOriginLeft', '_tableOriginTop', 'tableRow', 'tableCol'
     ];
+
+    // ============================================================
+    // 🟥 暗記マスクの「マスクである」という目印の保存・復元
+    // 以前は isMemoryMask 等が保存対象に入っていなかったため、保存データの読み込み・
+    // ブラウザ再起動・ページ切替・元に戻す・データ読込のたびに「ただの四角」に戻り、
+    // タップしても表示/非表示が切り替わらなくなっていた。
+    // ・保存時：マスクの目印を必ず書き出す。タップで一時的に外した状態（薄い状態）は保存せず、
+    //   常に「覆った状態」で保存する（説明書どおり、戻ると再び隠れた状態から復習できる）。
+    // ・読込時：目印のない古い保存データ（この不具合で壊れてしまった既存のマスク）も、
+    //   「枠線なしで塗りつぶされた四角」＝マスクとみなして自動的に直す。
+    //   （アプリ内で他に塗りつぶしの四角は作られないため、誤判定は起きにくい）
+    // ============================================================
+    (function patchMemoryMaskSerialization() {
+      const origToObject = fabric.Object.prototype.toObject;
+      fabric.Object.prototype.toObject = function(propertiesToInclude) {
+        const o = origToObject.call(this, propertiesToInclude);
+        if (this.isMemoryMask) {
+          const full = this.maskFullOpacity || 1;
+          o.isMemoryMask = true;
+          o.isMaskRevealed = false;
+          o.maskFullOpacity = full;
+          o.opacity = full;
+        }
+        return o;
+      };
+      function looksLikeLegacyMask(o) {
+        const f = o.fill;
+        if (!f || typeof f !== 'string' || f === 'transparent' || f === 'none') return false;
+        if (/^rgba\(.*,\s*0(\.0+)?\)$/i.test(f)) return false;
+        if (o.stroke && o.strokeWidth > 0) return false;
+        if (o.isOriginMark || o.isTableGrid || o.isConnectorLine) return false;
+        return true;
+      }
+      const origRectFromObject = fabric.Rect.fromObject;
+      fabric.Rect.fromObject = function(object, callback) {
+        let obj = object;
+        if (obj && !obj.isMemoryMask && looksLikeLegacyMask(obj)) {
+          obj = Object.assign({}, obj, { isMemoryMask: true, isMaskRevealed: false, maskFullOpacity: 1, opacity: 1 });
+        }
+        if (obj && obj.isMemoryMask) {
+          obj = Object.assign({}, obj, { hoverCursor: 'pointer', isMaskRevealed: false });
+        }
+        return origRectFromObject.call(this, obj, callback);
+      };
+    })();
 
     function saveState() {
       if (isHistoryProcessing) return;
@@ -6477,19 +6523,25 @@
       mask.set({ opacity: mask.isMaskRevealed ? 0.1 : (mask.maskFullOpacity || 0.93) });
       canvas.requestRenderAll();
     }
+    // タップ判定：押した時の位置・大きさを覚えておき、離した時にほとんど変わっていなければ
+    // 「タップ」とみなして切り替える。指やペンの微小なブレ（object:movingが一瞬でも
+    // 発火する程度）でタップが無視されないよう、数pxまでは許容する。
     canvas.on('mouse:down', function(opt) {
-      if (opt.target && opt.target.isMemoryMask) opt.target._maskDragged = false;
-    });
-    canvas.on('object:moving', function(opt) {
-      if (opt.target && opt.target.isMemoryMask) opt.target._maskDragged = true;
-    });
-    canvas.on('object:scaling', function(opt) {
-      if (opt.target && opt.target.isMemoryMask) opt.target._maskDragged = true;
+      const t = opt.target;
+      if (t && t.isMemoryMask) {
+        t._maskDown = { l: t.left, t: t.top, sx: t.scaleX, sy: t.scaleY, w: t.width, h: t.height };
+      }
     });
     canvas.on('mouse:up', function(opt) {
-      if (opt.target && opt.target.isMemoryMask && !opt.target._maskDragged) {
-        toggleMemoryMask(opt.target);
-      }
+      const t = opt.target;
+      if (!t || !t.isMemoryMask || !t._maskDown) return;
+      const d = t._maskDown;
+      t._maskDown = null;
+      const zoom = canvas.getZoom() || 1;
+      const moved = (Math.abs(t.left - d.l) + Math.abs(t.top - d.t)) * zoom;
+      const resized = Math.abs(t.scaleX - d.sx) > 0.01 || Math.abs(t.scaleY - d.sy) > 0.01 ||
+                      t.width !== d.w || t.height !== d.h;
+      if (moved <= 8 && !resized) toggleMemoryMask(t);
     });
 
     window.addEventListener('resize', () => {
@@ -6503,7 +6555,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.184     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.185     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
