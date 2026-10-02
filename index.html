@@ -181,7 +181,8 @@
       }
     }
 
-    .btn-fixed-right.collapsed > *:not(#panel-collapse-btn) {
+    /* たたんだ状態でも、「»/«」ボタンと「❓使い方ガイド」ボタンだけは残す */
+    .btn-fixed-right.collapsed > *:not(#panel-collapse-btn):not(#help-btn) {
       display: none !important;
     }
     .btn-fixed-right.collapsed {
@@ -1422,6 +1423,42 @@
       });
     }
 
+    // 手書きを滑らかにするためのペン。
+    // ・入力点に「速度に応じた指数移動平均」をかける：ゆっくり動かしたとき（手ブレ・
+    //   タッチ入力のギザつきが出やすい）は強く、速く動かしたときは弱く平滑化して
+    //   ペン先の遅れを抑える。プレビュー（描画中）と確定後のパスの両方に同じ点列が
+    //   使われるため、ペンを離した瞬間に形が変わることもない。
+    // ・decimate（間引き）を弱めて、曲線を作る点を減らしすぎないようにする。
+    // ・ペンを離したときは、最後の実際の位置までしっかり線をつなぐ。
+    const SmoothPencilBrush = fabric.util.createClass(fabric.PencilBrush, {
+      decimate: 0.2,
+      _rawLast: null,
+      _addPoint: function(point) {
+        const pts = this._points;
+        this._rawLast = point;
+        if (pts.length === 0 || this.drawStraightLine) {
+          return this.callSuper('_addPoint', point);
+        }
+        const prev = pts[pts.length - 1];
+        const zoom = this.canvas.getZoom() || 1;
+        const distScreen = Math.hypot(point.x - prev.x, point.y - prev.y) * zoom;
+        // 画面上の移動量が小さいほど強く平滑化(0.35)、大きいほど素直に追従(最大0.9)
+        const alpha = Math.min(0.9, 0.35 + distScreen * 0.025);
+        const sm = new fabric.Point(
+          prev.x + (point.x - prev.x) * alpha,
+          prev.y + (point.y - prev.y) * alpha
+        );
+        return this.callSuper('_addPoint', sm);
+      },
+      onMouseUp: function(options) {
+        if (this.canvas._isMainEvent(options.e) && this._rawLast && this._points.length > 1) {
+          const last = this._points[this._points.length - 1];
+          if (!this._rawLast.eq(last)) this._points.push(this._rawLast);
+        }
+        return this.callSuper('onMouseUp', options);
+      }
+    });
+
     function applyBrushSettings() {
       const color = penColorInput.value;
       const width = parseInt(penWidthInput.value, 10);
@@ -1432,12 +1469,12 @@
 
       if (currentDrawMode === 'pen') {
         canvas.isDrawingMode = !isPanLockMode && !isSelectMode;
-        canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+        canvas.freeDrawingBrush = new SmoothPencilBrush(canvas);
         canvas.freeDrawingBrush.color = color;
         canvas.freeDrawingBrush.width = width;
       } else if (currentDrawMode === 'highlighter') {
         canvas.isDrawingMode = !isPanLockMode && !isSelectMode;
-        canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+        canvas.freeDrawingBrush = new SmoothPencilBrush(canvas);
         let hex = color.replace('#', '');
         if(hex.length === 3) hex = hex.split('').map(c => c + c).join('');
         const r = parseInt(hex.substr(0, 2), 16) || 0;
@@ -1449,7 +1486,7 @@
         // 一時描画ペン（レーザーポインター風）：色は常に赤で固定し、
         // 描いた線は少し経つと自動的にフェードアウトして消える。
         canvas.isDrawingMode = !isPanLockMode && !isSelectMode;
-        canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+        canvas.freeDrawingBrush = new SmoothPencilBrush(canvas);
         canvas.freeDrawingBrush.color = '#ff3b30';
         canvas.freeDrawingBrush.width = Math.max(4, width);
       } else {
@@ -3575,37 +3612,92 @@
       });
     }
 
+    // PDFを挿入する：全ページを縦に隙間なくつなげ、1つのグループ（共通groupId）として
+    // 今のページ(キャンバス)に置く。横幅は現在の用紙設定の横幅ぴったりに揃える
+    // （例：A4なら210mm分）。用紙が「なし」のときはA4縦の横幅を基準にする。
+    // 位置は、用紙グリッドの区切りに合わせて置く（用紙ごとのマス目にぴったり収まる）。
     async function loadPDFToCanvas(arrayBuffer) {
       try {
         const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
 
+        const paperKey = paperSizeSelect ? paperSizeSelect.value : '';
+        const paper = getPaperSizePx(paperKey);
+        const targetW = paper ? paper.w : PAPER_SIZES_MM.a4.w * PX_PER_MM;
+
+        // 1) 全ページを画像化（横幅=targetWの2倍の解像度で描画して、拡大しても読めるように）
+        const pageImages = []; // { dataUrl, w, h } ← w,hはキャンバス上の大きさ
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 2.0 });
+          const base = page.getViewport({ scale: 1.0 });
+          const renderScale = (targetW * 2) / base.width;
+          const viewport = page.getViewport({ scale: renderScale });
 
           const tempCanvas = document.createElement('canvas');
           const tempCtx = tempCanvas.getContext('2d');
-          tempCanvas.width = viewport.width;
-          tempCanvas.height = viewport.height;
-
+          tempCanvas.width = Math.ceil(viewport.width);
+          tempCanvas.height = Math.ceil(viewport.height);
           await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
 
-          const imgDataUrl = tempCanvas.toDataURL('image/png');
-
-          if (i > 1) {
-            pagesData.push(null);
-            currentPageIndex = pagesData.length - 1;
-            updatePageUI();
-            canvas.clear();
-            updateCanvasBackground(bgStyleSelect.value);
-            history = [];
-            historyStep = -1;
-          }
-
-          // 前のページへの画像追加が完了するのを待ってから次ページの処理に進む。
-          await addImageToCanvas(imgDataUrl);
+          pageImages.push({
+            dataUrl: tempCanvas.toDataURL('image/png'),
+            w: targetW,
+            h: targetW * (tempCanvas.height / tempCanvas.width)
+          });
         }
+
+        // 2) 置く位置を決める
+        const center = getCenterPosition();
+        const zoom = canvas.getZoom();
+        const vpt = canvas.viewportTransform;
+        const viewTop = -vpt[5] / zoom;
+        let left, top;
+        if (paper) {
+          // 背景の用紙マスは、原点(0,0)がマスの中心になるよう並んでいる。
+          // 画面の中央にあるマスの左端／画面上端に一番近いマスの上端に合わせる。
+          const col = Math.floor((center.x + paper.w / 2) / paper.w);
+          const row = Math.round((viewTop + paper.h / 2) / paper.h);
+          left = -paper.w / 2 + col * paper.w;
+          top = -paper.h / 2 + row * paper.h;
+        } else {
+          left = center.x - targetW / 2;
+          top = viewTop;
+        }
+
+        // 3) 画像を縦に並べて追加（同じgroupIdでまとめる）
+        const gid = generateGroupId();
+        const imgs = [];
+        let y = top;
+        for (const info of pageImages) {
+          const img = await new Promise((resolve) => {
+            fabric.Image.fromURL(info.dataUrl, (im) => resolve(im), { crossOrigin: 'anonymous' });
+          });
+          if (!img || !img.width) continue;
+          img.set({
+            left: left,
+            top: y,
+            scaleX: info.w / img.width,
+            scaleY: info.h / img.height,
+            groupId: gid
+          });
+          y += info.h;
+          imgs.push(img);
+          canvas.add(img);
+        }
+
+        if (imgs.length === 0) return;
+        canvas.discardActiveObject();
+        if (imgs.length > 1) {
+          canvas.setActiveObject(new fabric.ActiveSelection(imgs, { canvas }));
+        } else {
+          // 1ページだけのPDFはグループ不要
+          imgs[0].groupId = undefined;
+          canvas.setActiveObject(imgs[0]);
+        }
+        canvas.requestRenderAll();
+        updateDeleteButtonState();
+        updateGroupButtonState();
+        saveState();
       } catch (error) {
         console.error('PDF読み込みエラー:', error);
         alert('PDFの読み込みに失敗しました。');
@@ -6409,7 +6501,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.183     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.184     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
