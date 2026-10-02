@@ -874,7 +874,7 @@
         <ul>
           <li><b>🔷 図形</b>: メニューの「🔷 図形」から、四角形・円/楕円・三角形・ひし形・矢印を選ぶと、その図形が画面中央に挿入されます。考えを整理する図（フローチャートなど）を作るときに、手書きよりきれいに素早く配置できます。</li>
           <li><b>🧠 思考ツール</b>: メニューの「🧠 思考ツール」から、クラゲチャート（理由づけ）・Yチャート（多面的に見る）・フィッシュボーン図（原因分析）・ベン図（比較・共通点）といった定番のテンプレート図をまとめて配置できます。配置後は1つのまとまりとして扱われる（どれか1つをタップすると全体が選択される）ので、そのまま移動もできますし、✂️ボタンでグループ解除してパーツごとに自由に編集することもできます。各ラベルの文字はダブルタップして書き換えられます。</li>
-          <li><b>▦ 表（テーブル）</b>: メニューの「▦ 表」から行数・列数を指定して挿入します。入力は、セルの中ならどこをダブルタップ（ダブルクリック）してもできます。文字を入力するとセルの幅で自動的に折り返され、文字が増えて高さが足りなくなると、その行の高さが自動的に広がります。<br>セルを1つ選ぶ（長押し、または選択モードでタップ。挿入直後は左上のセルが選択済み）と、表の上側に「↔」、左側に「↕」、左上に「✥」のつまみが表示されます。<b>↔をドラッグ</b>すると列の幅、<b>↕をドラッグ</b>すると行の高さ、<b>✥をドラッグ</b>すると表全体を移動できます（選択中のセルをドラッグしても、表ごと動きます）。文字量で広がった行は、文字を消すと元の高さに戻ります。</li>
+          <li><b>▦ 表（テーブル）</b>: メニューの「▦ 表」から行数・列数を指定して挿入します。入力は、セルの中ならどこをダブルタップ（ダブルクリック）してもできます。文字を入力するとセルの幅で自動的に折り返され、文字が増えて高さが足りなくなると、その行の高さが自動的に広がります。<br>セルを1つ選ぶ（長押し、または選択モードでタップ。挿入直後は左上のセルが選択済み）と、表の上側に「↔」、左側に「↕」、左上に「✥」のつまみが表示されます。<b>↔をドラッグ</b>すると列の幅、<b>↕をドラッグ</b>すると行の高さ、<b>✥をドラッグ</b>すると表全体を移動できます（選択中のセルをドラッグしても、表ごと動きます）。文字量で広がった行は、文字を消すと元の高さに戻ります。<br>セルを選ぶと表の下に「＋行↑／＋行↓／－行／＋列←／＋列→／－列」のボタンも出ます。選択中のセルのある行・列を基準に、行・列を追加（隣のセルの文字サイズ・色を引き継ぎます）または削除できます（最大20行×10列。最後の1行・1列は削除できません。削除は「元に戻す」で取り消せます）。<br>表を選んで複製（📋）すると、表全体（罫線も）が別の表として複製され、元の表とは独立して編集できます。</li>
         </ul>
       </div>
 
@@ -5340,7 +5340,11 @@
 
       const OFFSET = 24;
       const cloned = [];
-      let pending = objectsToClone.length;
+      // 表のセルが含まれていたら、セルだけでなく表全体（罫線も）を新しい表として複製する
+      const tableIdsToDup = [];
+      objectsToClone.forEach(o => { if (o.tableId && tableIdsToDup.indexOf(o.tableId) < 0) tableIdsToDup.push(o.tableId); });
+      const plainObjects = objectsToClone.filter(o => !o.tableId);
+      let pending = plainObjects.length + tableIdsToDup.length;
       function finalize() {
         if (cloned.length === 1) {
           canvas.setActiveObject(cloned[0]);
@@ -5353,7 +5357,18 @@
         updateDeleteButtonState();
         saveState();
       }
-      objectsToClone.forEach(obj => {
+      tableIdsToDup.forEach(tid => {
+        duplicateTable(tid, OFFSET, (res) => {
+          if (res && res.cells.length) {
+            // 選択の代表として左上のセルを選ぶ（他のセル・罫線は一緒に動く）
+            const first = res.cells.find(o => o.tableRow === 0 && o.tableCol === 0) || res.cells[0];
+            cloned.push(first);
+          }
+          pending--;
+          if (pending === 0) finalize();
+        });
+      });
+      plainObjects.forEach(obj => {
         obj.clone((c) => {
           c.set({
             left: (obj.left || 0) + OFFSET,
@@ -6322,6 +6337,17 @@
       };
     })();
 
+    // 罫線は保存データから復元すると evented が元に戻ってしまう（保存対象外のため）。
+    // 表全体の範囲が当たり判定になって、セルの余白のタップが邪魔されないよう復元時に固定する。
+    (function patchTableGridFromObject() {
+      const origPathFromObject = fabric.Path.fromObject;
+      fabric.Path.fromObject = function(object, callback) {
+        let obj = object;
+        if (obj && obj.isTableGrid) obj = Object.assign({}, obj, { selectable: false, evented: false, objectCaching: false });
+        return origPathFromObject.call(this, obj, callback);
+      };
+    })();
+
     function insertTableAt(rows, cols) {
       rows = Math.max(1, Math.min(20, rows || 3));
       cols = Math.max(1, Math.min(10, cols || 3));
@@ -6464,6 +6490,169 @@
     });
 
     // ------------------------------------------------------------
+    // 行・列の追加／削除、表の複製
+    // ------------------------------------------------------------
+    const TABLE_MAX_ROWS = 20;
+    const TABLE_MAX_COLS = 10;
+
+    function getTableCells(tableId) {
+      return canvas.getObjects().filter(o => o.tableId === tableId && o.type === 'textbox');
+    }
+    function getTableSize(tableId) {
+      const cells = getTableCells(tableId);
+      if (cells.length === 0) return { rows: 0, cols: 0 };
+      return {
+        rows: Math.max.apply(null, cells.map(c => c.tableRow)) + 1,
+        cols: Math.max.apply(null, cells.map(c => c.tableCol)) + 1
+      };
+    }
+
+    // 隣のセルの書式（文字サイズ・色・フォントなど）を引き継いだ空のセルを作る
+    function makeTableCellLike(tableId, r, c, tpl) {
+      const base = {
+        left: 0, top: 0, width: TABLE_DEFAULT_COL_W - TABLE_CELL_PAD * 2,
+        fontSize: tpl ? tpl.fontSize : 14,
+        fill: tpl ? tpl.fill : textColorInput.value,
+        fontFamily: tpl ? tpl.fontFamily : fontSelect.value,
+        splitByGrapheme: true,
+        tableId, tableRow: r, tableCol: c
+      };
+      if (tpl) { base.fontWeight = tpl.fontWeight; base.fontStyle = tpl.fontStyle; base.textAlign = tpl.textAlign; }
+      return new fabric.Textbox('', Object.assign(base, TABLE_CELL_LOCK_PROPS));
+    }
+
+    // index の位置（0=いちばん上）に新しい行を差し込む
+    function tableInsertRow(tableId, index) {
+      const size = getTableSize(tableId);
+      if (!size.rows || size.rows >= TABLE_MAX_ROWS) return false;
+      index = Math.max(0, Math.min(size.rows, index));
+      reflowTable(tableId, { skipSave: true }); // 列幅・行の高さの設定値を確実に揃える
+      const grid = findTableGrid(tableId);
+      if (!grid || !Array.isArray(grid.tableRowHeights)) return false;
+      const cells = getTableCells(tableId);
+      const refRow = index > 0 ? index - 1 : 0; // 書式の見本にする行（ずらす前の番号）
+      const tpls = {};
+      cells.forEach(c => { if (c.tableRow === refRow) tpls[c.tableCol] = c; });
+      cells.forEach(c => { if (c.tableRow >= index) c.tableRow += 1; });
+      for (let col = 0; col < size.cols; col++) canvas.add(makeTableCellLike(tableId, index, col, tpls[col]));
+      const arr = grid.tableRowHeights.slice();
+      arr.splice(index, 0, TABLE_DEFAULT_ROW_H);
+      grid.tableRowHeights = arr;
+      reflowTable(tableId);
+      return true;
+    }
+    function tableDeleteRow(tableId, r) {
+      const size = getTableSize(tableId);
+      if (size.rows <= 1 || r < 0 || r >= size.rows) return false;
+      reflowTable(tableId, { skipSave: true });
+      const grid = findTableGrid(tableId);
+      if (!grid || !Array.isArray(grid.tableRowHeights)) return false;
+      const cells = getTableCells(tableId);
+      cells.filter(c => c.tableRow === r).forEach(c => canvas.remove(c));
+      cells.forEach(c => { if (c.tableRow > r) c.tableRow -= 1; });
+      const arr = grid.tableRowHeights.slice();
+      arr.splice(r, 1);
+      grid.tableRowHeights = arr;
+      reflowTable(tableId);
+      return true;
+    }
+    function tableInsertCol(tableId, index) {
+      const size = getTableSize(tableId);
+      if (!size.cols || size.cols >= TABLE_MAX_COLS) return false;
+      index = Math.max(0, Math.min(size.cols, index));
+      reflowTable(tableId, { skipSave: true });
+      const grid = findTableGrid(tableId);
+      if (!grid || !Array.isArray(grid.tableColWidths)) return false;
+      const cells = getTableCells(tableId);
+      const refCol = index > 0 ? index - 1 : 0;
+      const tpls = {};
+      cells.forEach(c => { if (c.tableCol === refCol) tpls[c.tableRow] = c; });
+      cells.forEach(c => { if (c.tableCol >= index) c.tableCol += 1; });
+      for (let row = 0; row < size.rows; row++) canvas.add(makeTableCellLike(tableId, row, index, tpls[row]));
+      const arr = grid.tableColWidths.slice();
+      arr.splice(index, 0, TABLE_DEFAULT_COL_W);
+      grid.tableColWidths = arr;
+      reflowTable(tableId);
+      return true;
+    }
+    function tableDeleteCol(tableId, c) {
+      const size = getTableSize(tableId);
+      if (size.cols <= 1 || c < 0 || c >= size.cols) return false;
+      reflowTable(tableId, { skipSave: true });
+      const grid = findTableGrid(tableId);
+      if (!grid || !Array.isArray(grid.tableColWidths)) return false;
+      const cells = getTableCells(tableId);
+      cells.filter(x => x.tableCol === c).forEach(x => canvas.remove(x));
+      cells.forEach(x => { if (x.tableCol > c) x.tableCol -= 1; });
+      const arr = grid.tableColWidths.slice();
+      arr.splice(c, 1);
+      grid.tableColWidths = arr;
+      reflowTable(tableId);
+      return true;
+    }
+
+    // 選択中のセルを基準にした操作。成功したら、操作後も表の操作つまみが残るよう
+    // 近くのセルを選び直す。op: rowAbove / rowBelow / rowDel / colLeft / colRight / colDel
+    function applyTableOperation(op, cell) {
+      if (!cell || !cell.tableId) return false;
+      const tid = cell.tableId, r = cell.tableRow, c = cell.tableCol;
+      if (cell.isEditing) cell.exitEditing(); // 入力中の内容を確定してから構造を変える
+      let ok = false, selRow = r, selCol = c;
+      if (op === 'rowAbove') { ok = tableInsertRow(tid, r); selRow = r; }
+      else if (op === 'rowBelow') { ok = tableInsertRow(tid, r + 1); selRow = r + 1; }
+      else if (op === 'colLeft') { ok = tableInsertCol(tid, c); selCol = c; }
+      else if (op === 'colRight') { ok = tableInsertCol(tid, c + 1); selCol = c + 1; }
+      else if (op === 'rowDel') { ok = tableDeleteRow(tid, r); selRow = Math.min(r, getTableSize(tid).rows - 1); }
+      else if (op === 'colDel') { ok = tableDeleteCol(tid, c); selCol = Math.min(c, getTableSize(tid).cols - 1); }
+      if (!ok) return false;
+      const cells = getTableCells(tid);
+      const next = cells.find(o => o.tableRow === selRow && o.tableCol === selCol) || cells[0];
+      canvas.discardActiveObject();
+      if (next) canvas.setActiveObject(next);
+      canvas.requestRenderAll();
+      updateDeleteButtonState();
+      return true;
+    }
+
+    // 表を丸ごと複製する。新しい tableId を振り、セル・罫線とも新しい表として独立させる
+    // （同じIDのままだと、元の表と混ざって並びが崩れていた）。
+    function duplicateTable(tableId, offset, done) {
+      const cells = getTableCells(tableId).slice();
+      const grid = findTableGrid(tableId);
+      if (cells.length === 0 || !grid) { done(null); return; }
+      const newId = generateTableId();
+      const created = [];
+      let newGrid = null;
+      let pending = cells.length + 1;
+      function fin() {
+        if (--pending > 0) return;
+        created.forEach(c => canvas.add(c));
+        if (newGrid) {
+          canvas.add(newGrid);
+          const originMark = canvas.getObjects().find(o => o.isOriginMark);
+          if (originMark) canvas.moveTo(newGrid, canvas.getObjects().indexOf(originMark) + 1);
+          else canvas.sendToBack(newGrid);
+        }
+        done({ id: newId, cells: created, grid: newGrid });
+      }
+      cells.forEach(cell => {
+        cell.clone((c) => {
+          c.set({ tableId: newId, left: cell.left + offset, top: cell.top + offset, isLocked: false, selectable: true, evented: true });
+          delete c.connId; delete c.groupId; delete c.lockIconFor; delete c._lockBadge;
+          created.push(c);
+          fin();
+        }, ['tableId', 'tableRow', 'tableCol']);
+      });
+      grid.clone((g) => {
+        g.set({ tableId: newId, left: grid.left + offset, top: grid.top + offset, selectable: false, evented: false, objectCaching: false });
+        g._tableOriginLeft = grid._tableOriginLeft + offset;
+        g._tableOriginTop = grid._tableOriginTop + offset;
+        newGrid = g;
+        fin();
+      }, ['isTableGrid', 'tableId', 'tableColWidths', 'tableRowHeights', 'tableEffColWidths', 'tableEffRowHeights', '_tableOriginLeft', '_tableOriginTop']);
+    }
+
+    // ------------------------------------------------------------
     // 表ごとの移動
     // どれか1つのセルをドラッグ（または複数のセルをまとめて選んでドラッグ）すると、
     // 選ばれていない残りのセルと罫線も同じ量だけ一緒に動かす。
@@ -6563,19 +6752,26 @@
         .tbl-handle-col { width: 34px; height: 22px; font-size: 14px; cursor: col-resize; }
         .tbl-handle-row { width: 22px; height: 34px; font-size: 14px; cursor: row-resize; }
         .tbl-handle-grip { width: 30px; height: 30px; font-size: 17px; cursor: move; background: rgba(255,152,0,0.95); }
+        .tbl-bar { position: fixed; left: 0; top: 0; display: flex; gap: 4px; padding: 4px; background: rgba(255,255,255,0.97);
+          border: 1px solid #b0bec5; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); pointer-events: auto;
+          touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+        .tbl-bar button { min-width: 46px; height: 32px; padding: 0 4px; font-size: 12px; font-weight: 600; color: #0d47a1;
+          background: #e3f2fd; border: 1px solid #90caf9; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+        .tbl-bar button.tbl-del { color: #b71c1c; background: #ffebee; border-color: #ef9a9a; }
+        .tbl-bar button:disabled { opacity: 0.35; cursor: default; }
       `;
       document.head.appendChild(style);
       const layer = document.createElement('div');
       layer.id = 'table-handle-layer';
       document.body.appendChild(layer);
 
-      let state = { tableId: null, sig: '', grip: null, cols: [], rows: [] };
+      let state = { tableId: null, sig: '', grip: null, cols: [], rows: [], bar: null, btns: {}, barSize: null, dis: {} };
       let drag = null;
       const upgrading = new Set();
 
       function clearHandles() {
         layer.innerHTML = '';
-        state = { tableId: null, sig: '', grip: null, cols: [], rows: [] };
+        state = { tableId: null, sig: '', grip: null, cols: [], rows: [], bar: null, btns: {}, barSize: null, dis: {} };
       }
       function activeTableId() {
         const a = canvas.getActiveObject();
@@ -6594,10 +6790,44 @@
       }
       function rebuild(tableId, nCols, nRows) {
         layer.innerHTML = '';
-        state = { tableId, sig: tableId + ':' + nCols + 'x' + nRows, grip: null, cols: [], rows: [] };
+        state = { tableId, sig: tableId + ':' + nCols + 'x' + nRows, grip: null, cols: [], rows: [], bar: null, btns: {}, barSize: null, dis: {} };
         state.grip = makeEl('grip', '✥', (e) => startDrag(e, 'move', 0));
         for (let c = 0; c < nCols; c++) state.cols.push(makeEl('col', '↔', (e) => startDrag(e, 'col', c)));
         for (let r = 0; r < nRows; r++) state.rows.push(makeEl('row', '↕', (e) => startDrag(e, 'row', r)));
+        buildBar();
+      }
+
+      // 行・列の追加／削除ボタン（選択中のセルの行・列が基準）
+      const BAR_ITEMS = [
+        ['rowAbove', '＋行↑', '選択中のセルの行の上に、行を追加'],
+        ['rowBelow', '＋行↓', '選択中のセルの行の下に、行を追加'],
+        ['rowDel', '－行', '選択中のセルの行を削除'],
+        ['colLeft', '＋列←', '選択中のセルの列の左に、列を追加'],
+        ['colRight', '＋列→', '選択中のセルの列の右に、列を追加'],
+        ['colDel', '－列', '選択中のセルの列を削除']
+      ];
+      function buildBar() {
+        const bar = document.createElement('div');
+        bar.className = 'tbl-bar';
+        BAR_ITEMS.forEach(([op, label, title]) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = label;
+          b.title = title;
+          if (op === 'rowDel' || op === 'colDel') b.classList.add('tbl-del');
+          // ボタンを押してもキーボード（入力中のセル）からフォーカスを奪わない
+          b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); });
+          b.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            if (b.disabled) return;
+            const a = canvas.getActiveObject();
+            if (a && a.tableId && !a._objects) applyTableOperation(op, a);
+          });
+          bar.appendChild(b);
+          state.btns[op] = b;
+        });
+        layer.appendChild(bar);
+        state.bar = bar;
       }
       // つまみの大きさ（CSSと同じ値）。描画のたびにレイアウトを読み直さないよう固定値で計算する
       const HANDLE_SIZE = { grip: [30, 30], col: [34, 22], row: [22, 34] };
@@ -6629,6 +6859,22 @@
         const sy = (y) => rect.top + vpt[5] + y * z;
         const ox = grid._tableOriginLeft, oy = grid._tableOriginTop;
 
+        // 行・列ボタン：表の下側に置く（画面からはみ出さないよう端で止める）
+        if (state.bar) {
+          if (!state.barSize) state.barSize = [state.bar.offsetWidth, state.bar.offsetHeight];
+          const tableH = rows.reduce((a, b) => a + b, 0);
+          let bx = sx(ox), by = sy(oy + tableH) + 12;
+          bx = Math.max(4, Math.min(window.innerWidth - state.barSize[0] - 4, bx));
+          by = Math.max(4, Math.min(window.innerHeight - state.barSize[1] - 4, by));
+          state.bar.style.transform = 'translate(' + Math.round(bx) + 'px,' + Math.round(by) + 'px)';
+          const dis = {
+            rowAbove: rows.length >= TABLE_MAX_ROWS, rowBelow: rows.length >= TABLE_MAX_ROWS, rowDel: rows.length <= 1,
+            colLeft: cols.length >= TABLE_MAX_COLS, colRight: cols.length >= TABLE_MAX_COLS, colDel: cols.length <= 1
+          };
+          Object.keys(dis).forEach(k => {
+            if (state.dis[k] !== dis[k]) { state.dis[k] = dis[k]; state.btns[k].disabled = dis[k]; }
+          });
+        }
         place(state.grip, 'grip', sx(ox) - 24, sy(oy) - 24);
         let acc = 0;
         for (let c = 0; c < cols.length; c++) { acc += cols[c]; place(state.cols[c], 'col', sx(ox + acc), sy(oy) - 18); }
@@ -6862,7 +7108,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.186     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.187     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
