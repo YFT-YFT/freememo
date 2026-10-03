@@ -1624,6 +1624,7 @@
         originY: 'center',
         selectable: false,
         evented: false,
+        excludeFromExport: true, // 画面上の目印なので、保存データ・書き出しには含めない
         isLockBadge: true
       });
       canvas.add(badge);
@@ -1650,6 +1651,7 @@
         originY: 'center',
         selectable: false,
         evented: false,
+        excludeFromExport: true, // 画面上の目印なので、保存データ・書き出しには含めない
         isLockBadge: true
       });
       canvas.add(badge);
@@ -1663,7 +1665,13 @@
     // 差し替わった直後に呼ぶ。バッジ自体は保存対象にしていないため、
     // isLocked:true なオブジェクトを元に毎回作り直す。
     function refreshAllLockBadges() {
-      canvas.getObjects().slice().forEach(o => { if (o.isLockBadge) canvas.remove(o); });
+      // 以前の版では、🔒バッジが保存データにそのまま紛れ込み、読み込むたびに
+      // 「ただの文字」として残って増え続けていた（ロック解除しても消えず、書き出しにも写る）。
+      // 目印(isLockBadge)の無い、🔒/🔓だけの文字（fabric.Text）は、この種のゴミなので取り除く。
+      // （利用者が入力する文字は i-text / textbox なので巻き込まれない）
+      canvas.getObjects().slice().forEach(o => {
+        if (o.isLockBadge || (o.type === 'text' && (o.text === '🔒' || o.text === '🔓'))) canvas.remove(o);
+      });
       const handledGids = new Set();
       canvas.getObjects().slice().forEach(obj => {
         if (!obj.isLocked) return;
@@ -1723,6 +1731,7 @@
         selectable: false,
         evented: true,
         hoverCursor: 'pointer',
+        excludeFromExport: true, // 一時表示のアイコン。保存データに紛れ込まないようにする
         originX: 'center',
         originY: 'center'
       });
@@ -2178,6 +2187,7 @@
           selectable: false,
           evented: false,
           isConnectorPreviewLine: true,
+          excludeFromExport: true, // ドラッグ中だけの表示。万一この間に保存されても含めない
           arrowType: connectorArrowType
         });
         canvas.add(connectorPreviewLine);
@@ -3197,6 +3207,48 @@
     ];
 
     // ============================================================
+    // 🌗 ページごとの「背景の明るさ」の記録と、開いたときの色合わせ
+    // 背景を白⇔暗い色に切り替えると、黒系の線は白に、白い線は黒系に自動で反転される。
+    // 以前はこの反転が「いま開いているページ」にしか効かなかったため、別のページへ移動すると
+    // 「暗い背景に黒い線」「白い背景に白い線」で見えなくなっていた（再起動後も同様）。
+    // そこで各ページの保存データに「どの明るさの背景で保存したか」を記録しておき、
+    // ページを開く／元に戻す／やり直すときに、今の背景と明るさが違っていたら同じ反転をかける。
+    // （明るさが同じなら何もしないので、白い背景にあえて描いた白い線などは変わらない）
+    // ============================================================
+    function serializeCanvasState() {
+      const obj = canvas.toJSON(CANVAS_JSON_EXTRA_PROPS);
+      obj.pentakiBgDark = isDarkBackgroundColor(bgStyleSelect.value); // 必ず最後のキーにする（末尾から読むため）
+      return JSON.stringify(obj);
+    }
+    function readSavedBgDark(json) {
+      if (typeof json !== 'string') return null;
+      const m = /"pentakiBgDark":(true|false)\}$/.exec(json.slice(-48));
+      return m ? m[1] === 'true' : null; // 目印の無い古い保存データは null（そのまま表示）
+    }
+    // 背景の明るさに合わせて、黒系↔白の線・塗り・文字を入れ替える。変えた個数を返す。
+    function recolorObjectsForBackground(toDark) {
+      let changed = 0;
+      canvas.getObjects().forEach(obj => {
+        if (isGuideObject(obj)) return;
+        if (toDark) {
+          if (obj.stroke === '#222222' || obj.stroke === '#000000') { obj.set('stroke', '#ffffff'); changed++; }
+          if (obj.fill === '#222222' || obj.fill === '#000000') { obj.set('fill', '#ffffff'); changed++; }
+        } else {
+          if (obj.stroke === '#ffffff') { obj.set('stroke', '#222222'); changed++; }
+          if (obj.fill === '#ffffff') { obj.set('fill', '#222222'); changed++; }
+        }
+      });
+      return changed;
+    }
+    // 読み込んだページの保存時の背景と、今の背景の明るさが違うときだけ色を合わせる。
+    function adaptLoadedCanvasToBackground(json) {
+      const saved = readSavedBgDark(json);
+      const now = isDarkBackgroundColor(bgStyleSelect.value);
+      if (saved === null || saved === now) return false;
+      return recolorObjectsForBackground(now) > 0;
+    }
+
+    // ============================================================
     // 🟥 暗記マスクの「マスクである」という目印の保存・復元
     // 以前は isMemoryMask 等が保存対象に入っていなかったため、保存データの読み込み・
     // ブラウザ再起動・ページ切替・元に戻す・データ読込のたびに「ただの四角」に戻り、
@@ -3245,7 +3297,7 @@
       if (isHistoryProcessing) return;
       if (historyStep < history.length - 1) history = history.slice(0, historyStep + 1);
 
-      const json = JSON.stringify(canvas.toJSON(CANVAS_JSON_EXTRA_PROPS));
+      const json = serializeCanvasState();
       history.push(json);
       if (history.length > MAX_HISTORY) history.shift(); // 上限を超えたら古い履歴から破棄
       historyStep = history.length - 1;
@@ -3275,6 +3327,7 @@
           refreshAllLockBadges();
           refreshLabeledShapeHitAreas();
           refreshAllConnectorLines(); // 旧バージョンの中心接続の線も、図形の縁基準の位置に補正する
+          adaptLoadedCanvasToBackground(history[historyStep]); // 背景を切り替える前の状態に戻った場合の色合わせ
           canvas.renderAll();
           updateHistoryButtons();
           pagesData[currentPageIndex] = history[historyStep];
@@ -3295,6 +3348,7 @@
           refreshAllLockBadges();
           refreshLabeledShapeHitAreas();
           refreshAllConnectorLines();
+          adaptLoadedCanvasToBackground(history[historyStep]);
           canvas.renderAll();
           updateHistoryButtons();
           pagesData[currentPageIndex] = history[historyStep];
@@ -3327,9 +3381,17 @@
           refreshAllLockBadges();
           refreshLabeledShapeHitAreas();
           refreshAllConnectorLines();
+          // このページを保存したときと今とで背景の明るさが違えば、線の色を今の背景に合わせる
+          const adapted = adaptLoadedCanvasToBackground(pageJson);
           canvas.renderAll();
           history = [pageJson];
           historyStep = 0;
+          if (adapted) {
+            const adaptedJson = serializeCanvasState();
+            history = [adaptedJson];
+            pagesData[currentPageIndex] = adaptedJson;
+            autoSaveLocal();
+          }
           updateHistoryButtons();
         });
       } else {
@@ -3607,17 +3669,7 @@
       penColorInput.updateSwatch && penColorInput.updateSwatch();
       textColorInput.updateSwatch && textColorInput.updateSwatch();
 
-      canvas.getObjects().forEach(obj => {
-        if (isGuideObject(obj)) return;
-
-        if (isDarkTarget) {
-          if (obj.stroke === '#222222' || obj.stroke === '#000000') obj.set('stroke', '#ffffff');
-          if (obj.fill === '#222222' || obj.fill === '#000000') obj.set('fill', '#ffffff');
-        } else {
-          if (obj.stroke === '#ffffff') obj.set('stroke', '#222222');
-          if (obj.fill === '#ffffff') obj.set('fill', '#222222');
-        }
-      });
+      recolorObjectsForBackground(isDarkTarget);
 
       applyBrushSettings();
       updateCanvasBackground(bgVal);
@@ -3638,6 +3690,45 @@
     bgPatternSelect.addEventListener('change', () => {
       updateCanvasBackground(bgStyleSelect.value);
     });
+
+    // 背景色・罫線・用紙サイズは、再起動のたびに初期値へ戻っていた（データ書出には含まれるのに、
+    // 自動保存には含まれていなかった）。小さな設定なので localStorage に覚えておく。
+    const VIEW_SETTINGS_KEY = 'smart_memo_canvas_data_v26_view_settings';
+    function setSelectValueIfValid(sel, value) {
+      if (!sel || value === undefined || value === null) return false;
+      const exists = Array.from(sel.options).some(o => o.value === String(value));
+      if (!exists) return false;
+      sel.value = String(value);
+      return true;
+    }
+    function saveViewSettings() {
+      try {
+        localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify({
+          bgStyle: bgStyleSelect.value, bgPattern: bgPatternSelect.value, paperSize: paperSizeSelect.value
+        }));
+      } catch (e) { /* 保存できない環境では無視 */ }
+    }
+    function restoreViewSettings() {
+      try {
+        const raw = localStorage.getItem(VIEW_SETTINGS_KEY);
+        if (!raw) return;
+        const v = JSON.parse(raw);
+        setSelectValueIfValid(bgStyleSelect, v.bgStyle);
+        setSelectValueIfValid(bgPatternSelect, v.bgPattern);
+        setSelectValueIfValid(paperSizeSelect, v.paperSize);
+        // 暗い背景で始まる場合、ペン・文字の既定色（黒系）が見えなくなってしまうため、
+        // 背景色を切り替えたときと同じ調整をする（保存済みの描画内容は、切り替え時に
+        // すでに色が調整されているので、ここでは触らない）。
+        if (isDarkBackgroundColor(bgStyleSelect.value)) {
+          if (penColorInput.value === '#222222' || penColorInput.value === '#000000') penColorInput.value = '#ffffff';
+          if (textColorInput.value === '#222222' || textColorInput.value === '#000000') textColorInput.value = '#ffffff';
+          penColorInput.updateSwatch && penColorInput.updateSwatch();
+          textColorInput.updateSwatch && textColorInput.updateSwatch();
+          applyBrushSettings();
+        }
+      } catch (e) { /* 壊れていたら無視（初期値のまま） */ }
+    }
+    [bgStyleSelect, bgPatternSelect, paperSizeSelect].forEach(sel => sel.addEventListener('change', saveViewSettings));
 
     function getCenterPosition() {
       const vpt = canvas.viewportTransform;
@@ -3803,8 +3894,24 @@
       if (activeObjects && activeObjects.length > 0) {
         const affectedGids = new Set();
         const affectedTableIds = new Set();
+        // 表：すべてのセルを選んでいるときだけ表ごと削除する。一部のセルだけを選んで
+        // 削除した場合は、セル自体を消すと表に穴があいてしまうため、中の文字だけを消す。
+        const selectedCellsByTable = {};
+        activeObjects.forEach(o => {
+          if (o.tableId && o.type === 'textbox') (selectedCellsByTable[o.tableId] = selectedCellsByTable[o.tableId] || []).push(o);
+        });
+        const cellsToJustClear = new Set();
+        Object.keys(selectedCellsByTable).forEach(tid => {
+          const total = canvas.getObjects().filter(o => o.tableId === tid && o.type === 'textbox').length;
+          if (selectedCellsByTable[tid].length < total) selectedCellsByTable[tid].forEach(c => cellsToJustClear.add(c));
+        });
         activeObjects.forEach(obj => {
           if (isGuideObject(obj)) return;
+          if (cellsToJustClear.has(obj)) {
+            if (obj.text) { obj.set('text', ''); if (obj.initDimensions) obj.initDimensions(); }
+            affectedTableIds.add(obj.tableId);
+            return;
+          }
           if (obj.groupId) affectedGids.add(obj.groupId);
           if (obj.tableId) affectedTableIds.add(obj.tableId);
           canvas.remove(obj);
@@ -4182,7 +4289,7 @@
     function persistNowSafely() {
       if (!restoreDone) return;
       try {
-        pagesData[currentPageIndex] = JSON.stringify(canvas.toJSON(CANVAS_JSON_EXTRA_PROPS));
+        pagesData[currentPageIndex] = serializeCanvasState();
       } catch (e) { /* noop */ }
       if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
       const snap = buildSnapshot();
@@ -4197,6 +4304,7 @@
     if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(() => {}); }
 
     async function loadSavedData() {
+      restoreViewSettings(); // 背景色・罫線・用紙サイズを、前回の設定に戻してから最初のページを描く
       // 1) IndexedDB（本体）
       let idbRec = null;
       try {
@@ -4289,11 +4397,9 @@
           '今すぐ全ページを削除して、保存領域を空けますか？\n' +
           '（削除する場合は、先に「📤 データ書出」で書き出してバックアップを取ることをおすすめします）\n\n' +
           '「キャンセル」を選んだ場合、今回は何も削除されません。';
-        if (confirm(msg)) {
-          if (confirm('最終確認：本当にすべてのページを削除しますか？この操作は元に戻せません。')) {
-            clearAllPagesData();
-          }
-        }
+        showConfirmModal(msg, () => {
+          showConfirmModal('最終確認：本当にすべてのページを削除しますか？この操作は元に戻せません。', () => { clearAllPagesData(); });
+        });
       };
 
       if (navigator.storage && navigator.storage.estimate) {
@@ -4910,6 +5016,27 @@
     function handleDummyInputCommit() {
       const val = dummyInput.value;
       if (!val) return;
+
+      // 表のセルを1つ選んでいる状態（挿入直後など）で文字を打ったときは、画面中央に新しい
+      // 文字枠を作るのではなく、そのセルへ続けて入力する。
+      const sel = canvas.getActiveObject();
+      if (sel && sel.tableId && sel.type === 'textbox' && !sel.isLocked && !sel.isEditing) {
+        try {
+          sel.enterEditing();
+          if (sel.hiddenTextarea) {
+            const ta = sel.hiddenTextarea;
+            const end = (sel.text || '').length;
+            sel.selectionStart = sel.selectionEnd = end;      // 既存の文字の末尾に追記する
+            ta.value = (sel.text || '') + val;
+            ta.focus();
+            ta.selectionStart = ta.selectionEnd = ta.value.length;
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            dummyInput.value = '';
+            return;
+          }
+        } catch (err) { /* うまくいかなければ、従来どおり新しい文字枠を作る */ }
+      }
+
       const center = getCenterPosition();
       let posX = lastHandwritingBounds ? lastHandwritingBounds.left : center.x;
       let posY = lastHandwritingBounds ? lastHandwritingBounds.top : center.y;
@@ -5002,6 +5129,23 @@
       saveState();
     }
 
+    // 書き出し中だけ隠す「画面上の目印」（原点マーク・ロックバッジ・ロックアイコン・接続のプレビュー線）
+    function getExportHiddenGuides() {
+      return canvas.getObjects().filter(o => o.isOriginMark || o.isLockBadge || o.isConnectorPreviewLine || o.lockIconFor);
+    }
+
+    // キャンバス1枚の大きさには、ブラウザごとに上限がある（iOS/iPadOSのSafariは約1,677万画素、
+    // 一辺はおよそ16384pxまで）。上限を超えると画像が真っ白になったり失敗したりするため、
+    // 希望の倍率が大きすぎる場合は、上限に収まる倍率まで下げる。
+    const EXPORT_MAX_PIXELS = 15500000;
+    const EXPORT_MAX_SIDE = 15000;
+    function capExportMultiplier(width, height, desired) {
+      const w = Math.max(1, width), h = Math.max(1, height);
+      const byArea = Math.sqrt(EXPORT_MAX_PIXELS / (w * h));
+      const bySide = EXPORT_MAX_SIDE / Math.max(w, h);
+      return Math.max(0.05, Math.min(desired, byArea, bySide));
+    }
+
     // format: 'png'（既定・可逆） or 'jpeg'（PDF用。同じ300dpi解像度のまま
     // ファイルサイズを大きく削減できる）。quality: jpeg時の品質(0-1)。
     function getExportDataURL(options) {
@@ -5015,67 +5159,66 @@
       canvas.discardActiveObject();
 
       const currentVpt = canvas.viewportTransform.slice();
-      const originMark = canvas.getObjects().find(o => o.isOriginMark);
-      if (originMark) originMark.visible = false;
-
-      // 出力（PNG/PDF）には格子模様（細かい方眼・用紙サイズの区切りとも）を
-      // 映したくないため、一時的に無地の背景色へ差し替えてから書き出し、
-      // 終わったら元のパターンに戻す。JPEGは透過を持てないため、
-      // どちらにしても不透明な背景色に揃えておく必要がある。
-      // ただし罫線が「方眼（出力あり）」の場合だけは、書き出し後もそのまま
-      // 格子模様を残したいので、この差し替えをスキップする。
-      const keepGridInExport = bgPatternSelect && bgPatternSelect.value === 'grid-export';
+      const guides = getExportHiddenGuides();
+      const guideVisible = guides.map(o => o.visible);
       const originalBackground = canvas.backgroundColor;
-      if (!keepGridInExport) canvas.backgroundColor = bgStyleSelect.value;
 
-      canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-      canvas.renderAll();
+      // 途中で失敗しても（キャンバスが大きすぎる等）、表示（視点・背景・目印）は必ず元に戻す
+      try {
+        guides.forEach(o => { o.visible = false; });
 
-      const objects = canvas.getObjects().filter(o => o.visible && !isGuideObject(o));
+        // 出力（PNG/PDF）には格子模様（細かい方眼・用紙サイズの区切りとも）を
+        // 映したくないため、一時的に無地の背景色へ差し替えてから書き出し、
+        // 終わったら元のパターンに戻す。JPEGは透過を持てないため、
+        // どちらにしても不透明な背景色に揃えておく必要がある。
+        // ただし罫線が「方眼（出力あり）」の場合だけは、書き出し後もそのまま
+        // 格子模様を残したいので、この差し替えをスキップする。
+        const keepGridInExport = bgPatternSelect && bgPatternSelect.value === 'grid-export';
+        if (!keepGridInExport) canvas.backgroundColor = bgStyleSelect.value;
 
-      if (objects.length === 0) {
+        canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+        canvas.renderAll();
+
+        const objects = canvas.getObjects().filter(o => o.visible && !isGuideObject(o));
+        if (objects.length === 0) return null;
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        objects.forEach(obj => {
+          const bbox = obj.getBoundingRect(true, true);
+          minX = Math.min(minX, bbox.left);
+          minY = Math.min(minY, bbox.top);
+          maxX = Math.max(maxX, bbox.left + bbox.width);
+          maxY = Math.max(maxY, bbox.top + bbox.height);
+        });
+
+        const padding = 40;
+        const exportLeft = minX - padding;
+        const exportTop = minY - padding;
+        const exportWidth = (maxX - minX) + (padding * 2);
+        const exportHeight = (maxY - minY) + (padding * 2);
+
+        const pixelRatio = window.devicePixelRatio || 1;
+        const multiplier = capExportMultiplier(exportWidth, exportHeight, Math.max(2, pixelRatio));
+
+        const dataURL = canvas.toDataURL({
+          format: format,
+          left: exportLeft,
+          top: exportTop,
+          width: exportWidth,
+          height: exportHeight,
+          quality: quality,
+          multiplier: multiplier
+        });
+        // 上限を超えて失敗したブラウザは、中身の無いデータ("data:,")を返すことがある
+        if (!dataURL || dataURL.length < 32) throw new Error('画像を作れませんでした（内容が大きすぎる可能性があります）');
+
+        return { dataURL, width: exportWidth, height: exportHeight };
+      } finally {
         canvas.setViewportTransform(currentVpt);
-        if (originMark) originMark.visible = true;
+        guides.forEach((o, i) => { o.visible = guideVisible[i]; });
         canvas.backgroundColor = originalBackground;
         canvas.renderAll();
-        return null;
       }
-
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-      objects.forEach(obj => {
-        const bbox = obj.getBoundingRect(true, true);
-        minX = Math.min(minX, bbox.left);
-        minY = Math.min(minY, bbox.top);
-        maxX = Math.max(maxX, bbox.left + bbox.width);
-        maxY = Math.max(maxY, bbox.top + bbox.height);
-      });
-
-      const padding = 40;
-      const exportLeft = minX - padding;
-      const exportTop = minY - padding;
-      const exportWidth = (maxX - minX) + (padding * 2);
-      const exportHeight = (maxY - minY) + (padding * 2);
-
-      const pixelRatio = window.devicePixelRatio || 1;
-      const multiplier = Math.max(2, pixelRatio);
-
-      const dataURL = canvas.toDataURL({
-        format: format,
-        left: exportLeft,
-        top: exportTop,
-        width: exportWidth,
-        height: exportHeight,
-        quality: quality,
-        multiplier: multiplier
-      });
-
-      canvas.setViewportTransform(currentVpt);
-      if (originMark) originMark.visible = true;
-      canvas.backgroundColor = originalBackground;
-      canvas.renderAll();
-
-      return { dataURL, width: exportWidth, height: exportHeight };
     }
 
     document.getElementById('export-btn').addEventListener('click', () => {
@@ -5167,19 +5310,22 @@
         const isLandscape = paperPx.wMM > paperPx.hMM;
 
         const currentVpt = canvas.viewportTransform.slice();
-        const originMark = canvas.getObjects().find(o => o.isOriginMark);
+        const guides = getExportHiddenGuides();
+        const guideVisible = guides.map(o => o.visible);
         const originalBackground = canvas.backgroundColor;
         let pdf, pageAdded = false;
 
         const keepGridInExport = bgPatternSelect && bgPatternSelect.value === 'grid-export';
         try {
-          if (originMark) originMark.visible = false;
+          guides.forEach(o => { o.visible = false; });
           if (!keepGridInExport) canvas.backgroundColor = bgStyleSelect.value;
           canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
           canvas.renderAll();
 
-          // 実寸(mm)に対して十分な解像度で書き出す（およそ300dpi相当）
-          const multiplier = Math.max(2, 300 / 96);
+          // 実寸(mm)に対して十分な解像度で書き出す（およそ300dpi相当）。
+          // ただしA3など大きな用紙では、そのままだとiOS/iPadOSのキャンバス上限（約1,677万画素）を
+          // 超えて白紙になるため、上限に収まる範囲に抑える。
+          const multiplier = capExportMultiplier(tileW, tileH, Math.max(2, 300 / 96));
 
           const { jsPDF } = window.jspdf;
           pdf = new jsPDF(isLandscape ? 'l' : 'p', 'mm', [paperPx.wMM, paperPx.hMM]);
@@ -5214,7 +5360,7 @@
         } finally {
           // 途中でエラーが起きた場合でも、キャンバスの表示状態は必ず元に戻す
           canvas.setViewportTransform(currentVpt);
-          if (originMark) originMark.visible = true;
+          guides.forEach((o, i) => { o.visible = guideVisible[i]; });
           canvas.backgroundColor = originalBackground;
           canvas.renderAll();
         }
@@ -5293,14 +5439,14 @@
     });
 
     document.getElementById('clear-btn').addEventListener('click', () => {
-      if (confirm('現在のページの描画内容を消去しますか？（他のページには影響しません）')) {
+      showConfirmModal('現在のページの描画内容を消去しますか？（他のページには影響しません）', () => {
         pendingConnectorSource = null;
         canvas.clear();
         updateCanvasBackground(bgStyleSelect.value);
         history = [];
         historyStep = -1;
         saveState();
-      }
+      });
     });
 
     function clearAllPagesData() {
@@ -5316,9 +5462,9 @@
     }
 
     document.getElementById('clear-all-btn').addEventListener('click', () => {
-      if (!confirm('すべてのページの描画内容を消去します。この操作は元に戻せません。本当によろしいですか？')) return;
-      if (!confirm('最終確認：本当にすべてのページを消去しますか？')) return;
-      clearAllPagesData();
+      showConfirmModal('すべてのページの描画内容を消去します。この操作は元に戻せません。本当によろしいですか？', () => {
+        showConfirmModal('最終確認：本当にすべてのページを消去しますか？', () => { clearAllPagesData(); });
+      });
     });
 
     // ============================================================
@@ -5597,6 +5743,16 @@
 
     // 消しゴムの実際の消去処理をここに集約する（部分消しON/OFFで分岐）。
     function eraseTargetAt(target, pointer) {
+      if (target.tableId && target.type === 'textbox') {
+        // 表のセルをオブジェクトごと消すと、表に穴があいて二度と入力できなくなる。
+        // セルは残し、中の文字だけを消す（行・列ごとの削除は表の下のボタンで行う）。
+        if (target.text) {
+          target.set('text', '');
+          if (target.initDimensions) target.initDimensions();
+          reflowTable(target.tableId, { skipSave: true });
+        }
+        return;
+      }
       if (eraserPartialMode && target.type === 'path' && !target.isConnectorLine) {
         partialErasePathAt(target, pointer, getEraserRadius());
       } else {
@@ -5721,7 +5877,7 @@
     // 📤 データ書出 / 📥 データ読込（全ページを1つのファイルにまとめて保存・復元）
     // ============================================================
     function flushCurrentPageToPagesData() {
-      pagesData[currentPageIndex] = JSON.stringify(canvas.toJSON(CANVAS_JSON_EXTRA_PROPS));
+      pagesData[currentPageIndex] = serializeCanvasState();
     }
 
     document.getElementById('export-json-btn').addEventListener('click', () => {
@@ -5732,6 +5888,7 @@
           version: 1,
           exportedAt: new Date().toISOString(),
           bgStyle: bgStyleSelect.value,
+          bgPattern: bgPatternSelect.value,
           paperSize: paperSizeSelect.value,
           currentPageIndex,
           pages: pagesData
@@ -5760,14 +5917,22 @@
             alert('このファイルは対応していない形式です。');
             return;
           }
-          if (!confirm(`データを読み込みます（${payload.pages.length}ページ）。現在の内容は上書きされます。よろしいですか？`)) return;
-          pendingConnectorSource = null;
-          pagesData = payload.pages;
-          const idx = Math.min(Math.max(payload.currentPageIndex || 0, 0), pagesData.length - 1);
-          if (payload.bgStyle) bgStyleSelect.value = payload.bgStyle;
-          if (payload.paperSize !== undefined) paperSizeSelect.value = payload.paperSize;
-          switchPage(idx);
-          autoSaveLocal();
+          showConfirmModal(`データを読み込みます（${payload.pages.length}ページ）。現在の内容は上書きされます。よろしいですか？`, () => {
+            try {
+              pendingConnectorSource = null;
+              pagesData = payload.pages;
+              const idx = Math.min(Math.max(payload.currentPageIndex || 0, 0), pagesData.length - 1);
+              setSelectValueIfValid(bgStyleSelect, payload.bgStyle);
+              setSelectValueIfValid(paperSizeSelect, payload.paperSize);
+              setSelectValueIfValid(bgPatternSelect, payload.bgPattern);
+              saveViewSettings();
+              switchPage(idx);
+              autoSaveLocal();
+            } catch (err) {
+              console.error('データ読み込みエラー:', err);
+              alert('データの読み込みに失敗しました。ファイルが壊れているか、対応していない形式です。');
+            }
+          });
         } catch (err) {
           console.error('データ読み込みエラー:', err);
           alert('データの読み込みに失敗しました。ファイルが壊れているか、対応していない形式です。');
@@ -7108,7 +7273,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.187     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.190     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
