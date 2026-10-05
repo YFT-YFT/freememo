@@ -936,6 +936,7 @@
           <li><b>Ctrl + Z</b>: 1つ前の操作を取り消す（元に戻す）</li>
           <li><b>Ctrl + Y</b>: 取り消した操作をやり直す</li>
           <li><b>Ctrl + D</b>: 選択中のオブジェクトを複製</li>
+        <li><b>↑ ↓ ← →</b>: 選択中のオブジェクトを1pxずつ微調整して動かす（<b>Shiftを押しながら</b>で10pxずつ）。表・グループ・接続線もドラッグ移動と同じように一緒に動きます。キーを押し続けても「元に戻す」の履歴は1回分にまとまります。文字を入力中や、ロック中のオブジェクトは動きません。</li>
           <li><b>Delete / Backspace</b>: 選択中のオブジェクトを削除</li>
         </ul>
       </div>
@@ -2491,10 +2492,18 @@
       const target = opt.target;
       if (!target || !target.groupId || target._objects) return; // _objectsがある(=ActiveSelection等)場合はFabricが中身を自動で一緒に動かすので対象外
       if (target._grpLastLeft === undefined) {
-        // このドラッグでの最初のイベントでは基準位置を記録するだけ
-        target._grpLastLeft = target.left;
-        target._grpLastTop = target.top;
-        return;
+        // 基準位置は「ドラッグを始めた時の位置」にする。以前は最初のイベントの時点の位置を
+        // 基準にしていたため、最初に動いた分（素早く動かすほど大きい）だけ、グループの仲間
+        // （図形とそのラベル文字など）が置き去りになり、ずれたまま残っていた。
+        const orig = opt.transform && opt.transform.original;
+        if (orig && typeof orig.left === 'number') {
+          target._grpLastLeft = orig.left;
+          target._grpLastTop = orig.top;
+        } else {
+          target._grpLastLeft = target.left;
+          target._grpLastTop = target.top;
+          return;
+        }
       }
       const dx = target.left - target._grpLastLeft;
       const dy = target.top - target._grpLastTop;
@@ -3293,8 +3302,13 @@
       };
     })();
 
+    // 矢印キー微調整の保存待ち、ページ読み込み中フラグ（どちらも早い位置で宣言しておく）
+    let nudgeSaveTimer = null;
+    let pageLoadInProgress = false;
+    let pageLoadSafetyTimer = null;
     function saveState() {
       if (isHistoryProcessing) return;
+      if (nudgeSaveTimer) { clearTimeout(nudgeSaveTimer); nudgeSaveTimer = null; } // 既に保存するので、待機中の保存は不要
       if (historyStep < history.length - 1) history = history.slice(0, historyStep + 1);
 
       const json = serializeCanvasState();
@@ -3313,6 +3327,7 @@
     }
 
     function undo() {
+      flushNudgeSave(); // 矢印キーで動かした直後の内容も、1つの操作として取り消せるようにする
       if (historyStep > 0) {
         // loadFromJSONでキャンバスの中身が丸ごと新しいオブジェクトに
         // 差し替わるため、コネクタの選択待ち状態（古いオブジェクトへの
@@ -3338,6 +3353,7 @@
     }
 
     function redo() {
+      flushNudgeSave();
       if (historyStep < history.length - 1) {
         pendingConnectorSource = null;
         isHistoryProcessing = true;
@@ -3368,6 +3384,7 @@
 
     function switchPage(newIndex) {
       if (newIndex < 0 || newIndex >= pagesData.length) return;
+      flushNudgeSave(); // 動かしたままのページ移動で、直前の微調整が失われないようにする
       pendingConnectorSource = null;
       currentPageIndex = newIndex;
       if (storageReady) autoSaveLocal(); // 開いているページ番号も保存しておく
@@ -3375,7 +3392,15 @@
 
       const pageJson = pagesData[currentPageIndex];
       if (pageJson) {
+        // 読み込み中（画像のデコード待ちなど）は、キャンバスが空／途中までの状態。この間に
+        // 「画面が隠れた」等の保存が走ると、途中の内容でそのページを上書きしてしまうため、
+        // 読み込みが終わるまでは保存の対象から外す。
+        pageLoadInProgress = true;
+        if (pageLoadSafetyTimer) clearTimeout(pageLoadSafetyTimer);
+        pageLoadSafetyTimer = setTimeout(() => { pageLoadInProgress = false; }, 15000); // 万一コールバックが来なくても解除
         canvas.loadFromJSON(pageJson, () => {
+          pageLoadInProgress = false;
+          if (pageLoadSafetyTimer) { clearTimeout(pageLoadSafetyTimer); pageLoadSafetyTimer = null; }
           updateCanvasBackground(bgStyleSelect.value);
           drawCenterOriginMark();
           refreshAllLockBadges();
@@ -4003,7 +4028,9 @@
     function groupSelectedObjects() {
       const active = canvas.getActiveObject();
       if (!active || active.type !== 'activeSelection' || !active._objects) return;
-      const selected = active._objects.filter(o => !isGuideObject(o));
+      // 表のセルは対象外にする。表は「表自身の仕組み」で全体が一体として動くため、セルだけに
+      // groupId を付けると、グループの移動と表の移動が二重にかかって表が崩れてしまう。
+      const selected = active._objects.filter(o => !isGuideObject(o) && !o.tableId);
       if (selected.length < 2) return;
 
       // 選択した中に、すでに何らかのグループへ入っている図形があった場合、
@@ -4016,7 +4043,7 @@
       selected.forEach(o => {
         if (o.groupId) {
           canvas.getObjects().forEach(other => {
-            if (other.groupId === o.groupId) allMembers.add(other);
+            if (other.groupId === o.groupId && !other.tableId) allMembers.add(other);
           });
         }
       });
@@ -4289,7 +4316,7 @@
     function persistNowSafely() {
       if (!restoreDone) return;
       try {
-        pagesData[currentPageIndex] = serializeCanvasState();
+        if (!pageLoadInProgress && !isHistoryProcessing) pagesData[currentPageIndex] = serializeCanvasState();
       } catch (e) { /* noop */ }
       if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
       const snap = buildSnapshot();
@@ -4970,6 +4997,54 @@
       }
     }, { passive: false });
 
+    // ============================================================
+    // ⌨️ 矢印キーでの微調整移動
+    // 選択中のオブジェクトを、↑↓←→で1px、Shiftを押しながらで10px動かす（実座標の単位。
+    // 画面の拡大率とは無関係に一定）。表・グループ・接続線は、ドラッグ移動のときと同じく
+    // 一緒に追従する。キーを押し続けても履歴(元に戻す)が埋まらないよう、保存は操作が
+    // 一段落してから1回だけ行う。
+    // ============================================================
+    function flushNudgeSave() {
+      if (!nudgeSaveTimer) return;
+      clearTimeout(nudgeSaveTimer);
+      nudgeSaveTimer = null;
+      saveState();
+    }
+    function nudgeActiveObject(dx, dy) {
+      const target = canvas.getActiveObject();
+      if (!target || target.isEditing || target.isLocked) return false;
+      const members = target._objects ? target._objects : [target];
+      if (members.every(o => isGuideObject(o))) return false;
+
+      target.set({ left: target.left + dx, top: target.top + dy });
+      target.setCoords();
+      const moved = new Set(members);
+      moved.add(target);
+
+      // 表：選ばれていないセルと罫線も一緒に動かす
+      const tableIds = new Set();
+      members.forEach(o => { if (o.tableId) tableIds.add(o.tableId); });
+      tableIds.forEach(id => translateTableObjects(id, dx, dy, moved));
+
+      // グループ：単独で選んでいる場合は、同じグループの仲間も一緒に動かす
+      // （複数選択のときは、すでに全員が選択に含まれている）
+      if (!target._objects && target.groupId) {
+        canvas.getObjects().forEach(o => {
+          if (o === target || o.groupId !== target.groupId || o.isLocked) return;
+          if (o.tableId && tableIds.has(o.tableId)) return; // 表として既に動かした
+          o.set({ left: o.left + dx, top: o.top + dy });
+          o.setCoords();
+          updateConnectorLinesFor(o);
+        });
+      }
+      updateConnectorLinesFor(target);
+      canvas.requestRenderAll();
+
+      if (nudgeSaveTimer) clearTimeout(nudgeSaveTimer);
+      nudgeSaveTimer = setTimeout(() => { nudgeSaveTimer = null; saveState(); }, 400);
+      return true;
+    }
+
     window.addEventListener('keydown', (e) => {
       const activeObject = canvas.getActiveObject();
       if (activeObject && activeObject.isEditing) return;
@@ -4990,6 +5065,18 @@
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelectedObjects(); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') { if (activeObject) { e.preventDefault(); deleteSelectedObjects(); return; } }
       if (e.key === 'Escape' && pendingConnectorSource) { e.preventDefault(); cancelPendingConnectorSelection(); return; }
+
+      // 矢印キー：選択中のオブジェクトを微調整移動（Shiftで大きく）
+      if (!e.ctrlKey && !e.altKey && !e.metaKey &&
+          (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        if (activeObject && !activeObject.isLocked) {
+          const step = e.shiftKey ? 10 : 1;
+          const dx = e.key === 'ArrowLeft' ? -step : (e.key === 'ArrowRight' ? step : 0);
+          const dy = e.key === 'ArrowUp' ? -step : (e.key === 'ArrowDown' ? step : 0);
+          if (nudgeActiveObject(dx, dy)) e.preventDefault(); // ページがスクロールしないように
+        }
+        return;
+      }
 
       if (e.ctrlKey || e.altKey || e.metaKey) return;
       if (['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
@@ -5534,6 +5621,40 @@
     // ============================================================
     // ⬅️ 左揃え整列
     // ============================================================
+    // 整列・縦積み用：表（セル＋罫線）は、1つひとつのセルではなく「表全体」を1つの単位として扱う。
+    // （セルだけをバラバラに動かすと、表が崩れて、次に編集したときに元の位置へ戻ってしまう）
+    function buildArrangeUnits(members) {
+      const units = [];
+      const seenTables = new Set();
+      members.forEach(o => {
+        if (o.tableId) {
+          if (seenTables.has(o.tableId)) return;
+          seenTables.add(o.tableId);
+          units.push({ tableId: o.tableId, objs: canvas.getObjects().filter(x => x.tableId === o.tableId) });
+        } else {
+          units.push({ tableId: null, objs: [o] });
+        }
+      });
+      units.forEach(u => {
+        let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+        u.objs.forEach(x => {
+          const bb = x.getBoundingRect(true, true);
+          l = Math.min(l, bb.left); t = Math.min(t, bb.top);
+          r = Math.max(r, bb.left + bb.width); b = Math.max(b, bb.top + bb.height);
+        });
+        u.bbox = { left: l, top: t, width: r - l, height: b - t };
+      });
+      return units;
+    }
+    function moveArrangeUnitBy(u, dx, dy) {
+      if (!dx && !dy) return;
+      if (u.tableId) { translateTableObjects(u.tableId, dx, dy, null); return; }
+      const o = u.objs[0];
+      o.set({ left: (o.left || 0) + dx, top: (o.top || 0) + dy });
+      o.setCoords();
+      updateConnectorLinesFor(o);
+    }
+
     function alignSelectedObjectsLeft() {
       const active = canvas.getActiveObject();
       if (!active || active.type !== 'activeSelection' || !active._objects) return;
@@ -5543,20 +5664,11 @@
       canvas.discardActiveObject(); // 絶対座標に復元
       canvas.renderAll();
 
+      const units = buildArrangeUnits(members);
+      if (units.length < 2) { canvas.setActiveObject(new fabric.ActiveSelection(members, { canvas })); return; }
       let minLeft = Infinity;
-      members.forEach(o => {
-        const b = o.getBoundingRect(true, true);
-        if (b.left < minLeft) minLeft = b.left;
-      });
-      members.forEach(o => {
-        const b = o.getBoundingRect(true, true);
-        const dx = minLeft - b.left;
-        if (dx !== 0) {
-          o.set({ left: (o.left || 0) + dx });
-          o.setCoords();
-          updateConnectorLinesFor(o);
-        }
-      });
+      units.forEach(u => { if (u.bbox.left < minLeft) minLeft = u.bbox.left; });
+      units.forEach(u => moveArrangeUnitBy(u, minLeft - u.bbox.left, 0));
       canvas.setActiveObject(new fabric.ActiveSelection(members, { canvas }));
       canvas.requestRenderAll();
       saveState();
@@ -5877,6 +5989,7 @@
     // 📤 データ書出 / 📥 データ読込（全ページを1つのファイルにまとめて保存・復元）
     // ============================================================
     function flushCurrentPageToPagesData() {
+      if (pageLoadInProgress || isHistoryProcessing) return; // 読み込み途中のキャンバスで上書きしない
       pagesData[currentPageIndex] = serializeCanvasState();
     }
 
@@ -6067,30 +6180,20 @@
       canvas.discardActiveObject();
       canvas.renderAll();
 
-      const sorted = members.slice().sort((a, b) =>
-        a.getBoundingRect(true, true).top - b.getBoundingRect(true, true).top
-      );
+      const units = buildArrangeUnits(members);
+      if (units.length < 2) { canvas.setActiveObject(new fabric.ActiveSelection(members, { canvas })); return; }
+      const sortedUnits = units.slice().sort((a, b) => a.bbox.top - b.bbox.top);
       let minLeft = Infinity;
-      sorted.forEach(o => {
-        const b = o.getBoundingRect(true, true);
-        if (b.left < minLeft) minLeft = b.left;
-      });
+      sortedUnits.forEach(u => { if (u.bbox.left < minLeft) minLeft = u.bbox.left; });
 
       const GAP = 6;
-      let cursorTop = sorted[0].getBoundingRect(true, true).top;
-      sorted.forEach(o => {
-        const b = o.getBoundingRect(true, true);
-        const dxLeft = minLeft - b.left;
-        const dyTop = cursorTop - b.top;
-        if (dxLeft !== 0 || dyTop !== 0) {
-          o.set({ left: (o.left || 0) + dxLeft, top: (o.top || 0) + dyTop });
-          o.setCoords();
-          updateConnectorLinesFor(o);
-        }
-        cursorTop += b.height + GAP;
+      let cursorTop = sortedUnits[0].bbox.top;
+      sortedUnits.forEach(u => {
+        moveArrangeUnitBy(u, minLeft - u.bbox.left, cursorTop - u.bbox.top);
+        cursorTop += u.bbox.height + GAP;
       });
 
-      canvas.setActiveObject(new fabric.ActiveSelection(sorted, { canvas }));
+      canvas.setActiveObject(new fabric.ActiveSelection(members, { canvas }));
       canvas.requestRenderAll();
       saveState();
     }
@@ -6103,6 +6206,10 @@
       if (!active || active.type !== 'activeSelection' || !active._objects) return;
       const members = active._objects.filter(o => !isGuideObject(o) && !o.isConnectorLine);
       if (members.length < 2) return;
+      if (members.some(o => o.tableId)) {
+        alert('表のセルは結合できません。（セルを消すと表が崩れてしまうため）');
+        return;
+      }
       const allText = members.every(o => o.type === 'i-text' || o.type === 'text' || o.type === 'textbox');
       if (!allText) {
         alert('結合できるのは、テキスト同士の組み合わせのときだけです。');
@@ -6850,6 +6957,11 @@
       const dx = totalX - applied.x, dy = totalY - applied.y;
       if (!dx && !dy) return;
       const selected = new Set(members);
+      // 旧版でセルに groupId が付いてしまったデータでは、グループの移動処理が仲間のセルを
+      // 動かすため、ここで二重に動かさないよう除外する。
+      if (!t._objects && t.groupId) {
+        canvas.getObjects().forEach(o => { if (o !== t && o.groupId === t.groupId && !o.isLocked) selected.add(o); });
+      }
       ids.forEach(id => translateTableObjects(id, dx, dy, selected));
       applied.x = totalX; applied.y = totalY;
       canvas.requestRenderAll();
@@ -7273,7 +7385,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.190     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.193     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
