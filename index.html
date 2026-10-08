@@ -936,6 +936,7 @@
           <li><b>Ctrl + Z</b>: 1つ前の操作を取り消す（元に戻す）</li>
           <li><b>Ctrl + Y</b>: 取り消した操作をやり直す</li>
           <li><b>Ctrl + D</b>: 選択中のオブジェクトを複製</li>
+        <li><b>Ctrl + Enter</b>（Macは⌘ + Enter）: 文字を入力中に押すと、カーソルの位置で文字枠を<b>上下2つに分割</b>します。カーソルより前の文字は今の枠に残り、後ろの文字は真下の新しい枠になって、そこにカーソルが移ります（文字ごとの太字・色などもそのまま引き継ぎます）。カーソルが末尾なら、真下に空の枠を作って続けて入力できます（何も入力せずに編集を終えると、その空の枠は自動で消えます）。表のセルでは使えません。<br><b>スマホなどCtrlキーが無い場合</b>は、文章の<b>途中</b>でReturnを2回押して空行を作ると（前にも後ろにも文字がある空行にカーソルが乗ると）、その行の横に「✂️ ここで分割」が3秒ほど出ます。タップするとその位置で分割できます（無視すれば何も起きません。文末や先頭の空行では出ません）。</li>
         <li><b>↑ ↓ ← →</b>: 選択中のオブジェクトを1pxずつ微調整して動かす（<b>Shiftを押しながら</b>で10pxずつ）。表・グループ・接続線もドラッグ移動と同じように一緒に動きます。キーを押し続けても「元に戻す」の履歴は1回分にまとまります。文字を入力中や、ロック中のオブジェクトは動きません。</li>
           <li><b>Delete / Backspace</b>: 選択中のオブジェクトを削除</li>
         </ul>
@@ -5045,7 +5046,230 @@
       return true;
     }
 
+    // ============================================================
+    // ✂️ Ctrl（Macは⌘）+ Enter：文字入力中のカーソル位置で、文字枠を上下2つに分割する
+    // カーソルより前の文字は今の枠に残り、後ろの文字は新しい枠として真下に置かれる。
+    // 文字ごとの装飾（太字・色など）や、グループへの所属もそのまま引き継ぐ。
+    // 分割後は下の枠の先頭にカーソルが移るので、そのまま続けて入力できる。
+    // （カーソルが末尾にあるときは、真下に空の枠を作って、そこへ入力を続けられる）
+    // ============================================================
+    // cut（省略可）: { from, to } を指定すると、その範囲（空行など）を切り取って上下に分ける。
+    function splitEditingTextAtCursor(cut) {
+      const target = canvas.getActiveObject();
+      if (!target || !target.isEditing || target.tableId) return false;
+      if (target.type !== 'i-text' && target.type !== 'textbox') return false;
+      const fullText = target.text || '';
+      const pos = Math.min(target.selectionStart, fullText.length);
+      const cutFrom = cut ? cut.from : pos;
+      const cutTo = cut ? cut.to : pos;
+      if (!fullText.length || cutFrom <= 0) return false; // 先頭では分けようがないので何もしない
+
+      const GAP = 6;
+      const atEnd = !cut && pos >= fullText.length;
+      target.clone((lower) => {
+        // 途中経過（上の枠だけが残った状態など）が履歴に残らないよう、分割が終わるまで保存を止める。
+        // （編集を終えるとFabricが自動で「変更あり」を通知し、その都度保存されてしまうため）
+        const prevHistoryFlag = isHistoryProcessing;
+        isHistoryProcessing = true;
+        try {
+        // 下の枠：カーソルより前を削除（文字ごとの装飾は removeChars が一緒に処理する）
+        lower.removeChars(0, cutTo);
+        // 上の枠：カーソルより後ろを削除
+        target.removeChars(cutFrom, fullText.length);
+        // 分割点の前後に残った余分な改行（空行）を、すべて取り除く
+        while (target.text.endsWith('\n')) target.removeChars(target.text.length - 1, target.text.length);
+        while (lower.text.startsWith('\n')) lower.removeChars(0, 1);
+        if (target.initDimensions) target.initDimensions();
+        target.setCoords();
+        target.exitEditing();
+
+        const upperGone = !target.text;
+        const lowerTop = upperGone ? target.top : target.top + target.getScaledHeight() + GAP;
+        if (upperGone) canvas.remove(target);
+        lower.set({ left: target.left, top: lowerTop });
+        lower.setCoords();
+        canvas.add(lower);
+        canvas.setActiveObject(lower);
+        lower.enterEditing();
+        lower.setSelectionStart(0);
+        lower.setSelectionEnd(0);
+        } finally {
+          isHistoryProcessing = prevHistoryFlag;
+        }
+
+        if (atEnd) {
+          // 末尾で分けたときの空の枠は、何も入力せずに編集を終えたら取り除く
+          const cleanup = () => {
+            lower.off('editing:exited', cleanup);
+            if (!lower.text) { canvas.remove(lower); canvas.requestRenderAll(); saveState(); }
+          };
+          lower.on('editing:exited', cleanup);
+        }
+        canvas.requestRenderAll();
+        saveState();
+      }, ['groupId']);
+      return true;
+    }
+
+    // ============================================================
+    // 💬 「ここで分割」チップ（Ctrl+Enter が使えないスマホ向け）
+    // 文字入力中に、カーソルが「文章の途中の空行」に乗ったとき（＝前にも後ろにも文字がある空行）
+    // だけ、その行の横に小さな「✂️ ここで分割」を出す。タップするとその位置で上下に分割する。
+    // ・文末の空行や、先頭の空行では出ない（段落を空けるだけの普通の入力を邪魔しない）。
+    // ・自動では分割しない。3秒ほどで自然に消え、無視すれば何も起きない。
+    // ・同じ空行では、一度消えたら出し直さない（別の空行に移る／空行を作り直すと、また出る）。
+    // ・チップを押しても、入力中のキーボードは閉じない。
+    // ============================================================
+    (function setupSplitChip() {
+      const style = document.createElement('style');
+      style.textContent = `
+        #split-chip { position: fixed; left: 0; top: 0; display: none; align-items: center; justify-content: center;
+          height: 30px; padding: 0 12px; border-radius: 999px; background: rgba(38,50,56,0.95); color: #fff;
+          font-size: 13px; font-weight: 700; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+          z-index: 7; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+          -webkit-touch-callout: none; }
+      `;
+      document.head.appendChild(style);
+      const chip = document.createElement('div');
+      chip.id = 'split-chip';
+      chip.textContent = '✂️ ここで分割';
+      document.body.appendChild(chip);
+
+      const CHIP_VISIBLE_MS = 3000;
+      let currentKey = null;      // 今カーソルがある「条件を満たす空行」の識別（枠ID:行番号）
+      let hideTimer = null;
+      let shown = false;
+      let timedOut = false;               // 3秒で自然に消えた（同じ空行では出し直さない）
+      let hiddenBySelection = false;      // 範囲選択に切り替わって一時的に隠した（同じ空行に戻れば出し直す）
+      let chipObj = null, chipLine = -1;
+      let idSeq = 0;
+      const objIds = new WeakMap();
+      const idOf = (o) => { if (!objIds.has(o)) objIds.set(o, ++idSeq); return objIds.get(o); };
+
+      // 「文章の途中の空行」の行番号を返す（なければ -1）。次のどちらかのとき対象にする：
+      //  ・カーソルがその空行の上にある
+      //  ・カーソルが、その空行のすぐ次の行の先頭にある（Returnを2回押した直後は、こうなる）
+      function blankLineIndexInMiddle(t) {
+        if (!t || !t.isEditing || t.isLocked || t.tableId) return -1;
+        if (t.type !== 'i-text' && t.type !== 'textbox') return -1;
+        if (t.selectionStart !== t.selectionEnd) return -1;
+        const text = t.text || '';
+        const lines = text.split('\n');
+        // カーソルの行は、文字列から直接数える（画面上の折り返し行とは別。折り返しや
+        // 表示の更新タイミングに左右されない）
+        const pos = Math.min(t.selectionStart, text.length);
+        const before0 = text.slice(0, pos);
+        const loc = { lineIndex: (before0.match(/\n/g) || []).length, charIndex: pos - (before0.lastIndexOf('\n') + 1) };
+        let li = loc.lineIndex;
+        if (li < 0 || li >= lines.length) return -1;
+        if (lines[li].trim() !== '') {
+          // 空行の直後の行の先頭か？
+          if (loc.charIndex === 0 && li > 0 && lines[li - 1].trim() === '') li = li - 1;
+          else return -1;
+        }
+        const before = lines.slice(0, li).some(l => l.trim() !== '');
+        const after = lines.slice(li + 1).some(l => l.trim() !== '');
+        return (before && after) ? li : -1;
+      }
+      // 空行 li を文字位置の範囲(from, to)に直す。上の枠は from まで、下の枠は to 以降になる。
+      function blankLineRange(t, li) {
+        const lines = (t.text || '').split('\n');
+        let from = 0;
+        for (let k = 0; k < li; k++) from += lines[k].length + 1;
+        return { from, to: from + lines[li].length };
+      }
+
+      function hideChip() {
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        chip.style.display = 'none';
+        shown = false; chipObj = null; chipLine = -1;
+      }
+
+      function positionChip() {
+        if (!shown || !chipObj) return;
+        const t = chipObj;
+        const z = canvas.getZoom(), vpt = canvas.viewportTransform;
+        const rect = canvas.upperCanvasEl.getBoundingClientRect();
+        const sy = (t.scaleY || 1), sxs = (t.scaleX || 1);
+        // 改行で区切った行番号 → 画面上の（折り返し後の）行番号に直す
+        let wl = chipLine;
+        if (t._styleMap) { for (let i = 0; i < t._styleMap.length; i++) { if (t._styleMap[i].line === chipLine) { wl = i; break; } } }
+        let off = 0;
+        for (let k = 0; k < wl; k++) off += t.getHeightOfLine(k);
+        const lh = t.getHeightOfLine(wl);
+        const midY = rect.top + vpt[5] + (t.top + (off + lh / 2) * sy) * z;
+        const rightX = rect.left + vpt[4] + (t.left + (t.width || 0) * sxs) * z;
+        const w = chip.offsetWidth || 110, h = chip.offsetHeight || 30;
+        // キーボードで画面が狭くなっている場合（visualViewport）も考慮して、見える範囲に収める
+        const vv = window.visualViewport;
+        const vTop = vv ? vv.offsetTop : 0, vLeft = vv ? vv.offsetLeft : 0;
+        const vW = vv ? vv.width : window.innerWidth, vH = vv ? vv.height : window.innerHeight;
+        let x = rightX + 8, y = midY - h / 2;
+        x = Math.max(vLeft + 6, Math.min(vLeft + vW - w - 6, x));
+        y = Math.max(vTop + 6, Math.min(vTop + vH - h - 6, y));
+        chip.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px)';
+      }
+
+      function update() {
+        const t = canvas.getActiveObject();
+        // 文字を範囲選択している間（カーソル移動の途中で一瞬そう見える場合も含む）は、
+        // チップだけ隠す。「同じ空行では出し直さない」記憶は消さない。
+        if (t && t.isEditing && t.selectionStart !== t.selectionEnd) {
+          if (shown) { hiddenBySelection = true; hideChip(); }
+          return;
+        }
+        const li = blankLineIndexInMiddle(t);
+        if (li < 0) { currentKey = null; hiddenBySelection = false; if (shown) hideChip(); return; }
+        const key = idOf(t) + ':' + li;
+        if (key === currentKey) {
+          // 同じ空行：3秒で消えたあとは出し直さない。範囲選択で一時的に隠れただけなら出し直す。
+          if (!shown && hiddenBySelection && !timedOut) { hiddenBySelection = false; show(t, li); }
+          else positionChip();
+          return;
+        }
+        currentKey = key;
+        timedOut = false; hiddenBySelection = false;
+        show(t, li);
+      }
+      function show(t, li) {
+        chipObj = t; chipLine = li; shown = true;
+        chip.style.display = 'flex';
+        positionChip();
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => { timedOut = true; hideChip(); }, CHIP_VISIBLE_MS); // 3秒で自然に消える
+      }
+
+      canvas.on('text:changed', update);
+      canvas.on('text:selection:changed', update);
+      canvas.on('text:editing:entered', update);
+      canvas.on('text:editing:exited', () => { currentKey = null; hiddenBySelection = false; hideChip(); });
+      canvas.on('selection:cleared', () => { currentKey = null; hiddenBySelection = false; hideChip(); });
+      canvas.on('after:render', positionChip);
+
+      // 押してもキーボード（入力中のフォーカス）を奪わない
+      chip.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); });
+      chip.addEventListener('mousedown', (e) => { e.preventDefault(); });
+      chip.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const t = canvas.getActiveObject();
+        const li = blankLineIndexInMiddle(t);
+        hideChip();
+        currentKey = null;
+        // 空行そのものを切り取って、前と後ろに分ける（条件が崩れていたらカーソル位置で分割）
+        splitEditingTextAtCursor(li >= 0 ? blankLineRange(t, li) : undefined);
+      });
+    })();
+
     window.addEventListener('keydown', (e) => {
+      // Ctrl/⌘ + Enter（日本語入力の変換中は対象外）：入力中の文字枠をカーソル位置で分割
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === 'Enter' && !e.isComposing) {
+        const editing = canvas.getActiveObject();
+        if (editing && editing.isEditing && !editing.tableId && (editing.type === 'i-text' || editing.type === 'textbox')) {
+          e.preventDefault(); // ブラウザによっては、ここで余計な改行が入ってしまうのを防ぐ
+          splitEditingTextAtCursor();
+          return;
+        }
+      }
       const activeObject = canvas.getActiveObject();
       if (activeObject && activeObject.isEditing) return;
 
@@ -7385,7 +7609,7 @@
   </script>
   
   <div class="footer-info">
-    <div class="footer-text">Ver.0.193     Created by フジイヨウスケ with Gemini and Claude</div>
+    <div class="footer-text">Ver.0.195     Created by フジイヨウスケ with Gemini and Claude</div>
   </div>
 
 </body>
